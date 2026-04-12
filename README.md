@@ -26,6 +26,14 @@ Garden Planner is an interactive 3D tool for planning a garden in a specific phy
 
 It started as a planner for a 24 × 10 ft backyard in Ontario and has grown into a general-purpose tool that works anywhere in the world.
 
+## Why?
+
+Grocery prices have gone feral. A head of lettuce is pushing $4, a pint of tomatoes $6, and "shrinkflation" means the bag you bought last year is quietly 20% smaller this year. Growing even a fraction of your own produce is suddenly one of the highest-ROI weekend projects you can take on — but only if you get it right.
+
+The single biggest reason backyard gardens fail isn't bad soil or the wrong seeds. It's putting a sun-hungry plant (tomatoes, peppers, squash) in a spot that only gets three hours of light, then watching the season slip away. This tool takes the guesswork out *before* you've bought a seed packet, broken a sweat, or committed a square foot of real estate: model your yard once, see exactly where the sun actually falls across the season, and plant accordingly.
+
+Consider it a small, practical way to fight back against the grocery aisle.
+
 ## Features
 
 - **Worldwide sun math.** Pick any of 1000 large cities (sourced from GeoNames). The app computes latitude, longitude, and DST-aware timezone offsets, and corrects clock time to apparent solar time using the [Equation of Time](https://en.wikipedia.org/wiki/Equation_of_time). Solar noon lands where it actually should — ~13:19 in Ontario on the summer solstice, not 12:00.
