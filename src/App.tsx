@@ -14,8 +14,9 @@ import {
   degreesToCompass,
   calculateSunExposure,
   calculateHeatmapGrid,
+  heatmapInstanceBounds,
+  createDefaultHeatmap,
   DEFAULT_YARD_HEADING,
-  DEFAULT_HEATMAP_BOUNDS,
   SEASON_DAYS,
   seasonFromDay,
   dayOfYearToLabel,
@@ -25,6 +26,7 @@ import {
   type SunExposureResult,
   type HeatmapMode,
   type HeatmapGrid,
+  type HeatmapInstance,
 } from './sun'
 import {
   DEFAULT_STRUCTURES,
@@ -34,6 +36,7 @@ import {
   getDefaultConfigName,
   saveConfigToStorage,
   migrateBeds,
+  migrateHeatmapsFromConfig,
   type Structure,
   type StructureType,
   type PlantType,
@@ -68,9 +71,13 @@ function maxCustomId(items: { id: string }[], prefix: string): number {
 }
 
 const _defaultConfig = loadDefaultConfig()
+const _initialHeatmaps: HeatmapInstance[] = _defaultConfig
+  ? migrateHeatmapsFromConfig(_defaultConfig)
+  : []
 
 let nextStructureId = maxCustomId(_defaultConfig?.structures ?? DEFAULT_STRUCTURES, 'custom-') + 1
 let nextBedId = maxCustomId(_defaultConfig?.beds ?? [], 'custom-bed-') + 1
+let nextHeatmapId = maxCustomId(_initialHeatmaps, 'heatmap-') + 1
 
 export default function App() {
   const [layoutIdx, setLayoutIdx] = useState(_defaultConfig?.layoutIdx ?? 0)
@@ -105,21 +112,10 @@ export default function App() {
   const [sunProbeActive, setSunProbeActive] = useState(false)
   const [sunProbePosition, setSunProbePosition] = useState<{ x: number; z: number } | null>(null)
 
-  // Heatmap
-  const [heatmapVisible, setHeatmapVisible] = useState(_defaultConfig?.heatmapVisible ?? false)
-  const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>((_defaultConfig?.heatmapMode as HeatmapMode) ?? 'energyRating')
-  const [heatmapOpacity, setHeatmapOpacity] = useState(_defaultConfig?.heatmapOpacity ?? 0.55)
+  // Heatmaps (multiple instances)
+  const [heatmaps, setHeatmaps] = useState<HeatmapInstance[]>(_initialHeatmaps)
+  const [selectedHeatmapId, setSelectedHeatmapId] = useState<string | null>(null)
   const [gardenItemsOpacity, setGardenItemsOpacity] = useState(_defaultConfig?.gardenItemsOpacity ?? 1)
-
-  // Heatmap area (center + size). Default matches DEFAULT_HEATMAP_BOUNDS.
-  const _defaultHeatmapCenterX = (DEFAULT_HEATMAP_BOUNDS.minX + DEFAULT_HEATMAP_BOUNDS.maxX) / 2
-  const _defaultHeatmapCenterZ = (DEFAULT_HEATMAP_BOUNDS.minZ + DEFAULT_HEATMAP_BOUNDS.maxZ) / 2
-  const _defaultHeatmapWidth = DEFAULT_HEATMAP_BOUNDS.maxX - DEFAULT_HEATMAP_BOUNDS.minX
-  const _defaultHeatmapDepth = DEFAULT_HEATMAP_BOUNDS.maxZ - DEFAULT_HEATMAP_BOUNDS.minZ
-  const [heatmapCenterX, setHeatmapCenterX] = useState(_defaultConfig?.heatmapCenterX ?? _defaultHeatmapCenterX)
-  const [heatmapCenterZ, setHeatmapCenterZ] = useState(_defaultConfig?.heatmapCenterZ ?? _defaultHeatmapCenterZ)
-  const [heatmapWidth, setHeatmapWidth] = useState(_defaultConfig?.heatmapWidth ?? _defaultHeatmapWidth)
-  const [heatmapDepth, setHeatmapDepth] = useState(_defaultConfig?.heatmapDepth ?? _defaultHeatmapDepth)
 
   // Measurement grid
   const _defaultGridWidth = 60
@@ -133,11 +129,12 @@ export default function App() {
 
   const layout = layouts[layoutIdx]
 
-  // Mutual exclusion: selecting a bed deselects structures and vice versa
+  // Mutual exclusion: selecting one item deselects the others
   const selectBed = useCallback((id: string | null) => {
     setSelectedBedId(id)
     if (id) {
       setSelectedId(null)
+      setSelectedHeatmapId(null)
       requestAnimationFrame(() => {
         const section = document.getElementById('section-beds')
         if (section) section.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -147,7 +144,22 @@ export default function App() {
 
   const selectStructure = useCallback((id: string | null) => {
     setSelectedId(id)
-    if (id) setSelectedBedId(null)
+    if (id) {
+      setSelectedBedId(null)
+      setSelectedHeatmapId(null)
+    }
+  }, [])
+
+  const selectHeatmap = useCallback((id: string | null) => {
+    setSelectedHeatmapId(id)
+    if (id) {
+      setSelectedId(null)
+      setSelectedBedId(null)
+      requestAnimationFrame(() => {
+        const section = document.getElementById('section-heatmap')
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    }
   }, [])
 
   const sun = useMemo(
@@ -170,26 +182,20 @@ export default function App() {
     setSunProbePosition({ x, z })
   }, [])
 
-  const heatmapBounds = useMemo(
-    () => ({
-      minX: heatmapCenterX - heatmapWidth / 2,
-      maxX: heatmapCenterX + heatmapWidth / 2,
-      minZ: heatmapCenterZ - heatmapDepth / 2,
-      maxZ: heatmapCenterZ + heatmapDepth / 2,
-    }),
-    [heatmapCenterX, heatmapCenterZ, heatmapWidth, heatmapDepth],
-  )
-
-  const heatmapGrid = useMemo<HeatmapGrid | null>(() => {
-    if (!heatmapVisible) return null
-    return calculateHeatmapGrid(
-      dayOfYear,
-      yardHeadingDeg,
-      structures,
-      1,
-      heatmapBounds,
-    )
-  }, [heatmapVisible, dayOfYear, yardHeadingDeg, structures, heatmapBounds])
+  const heatmapGrids = useMemo<Record<string, HeatmapGrid>>(() => {
+    const out: Record<string, HeatmapGrid> = {}
+    for (const h of heatmaps) {
+      if (!h.visible) continue
+      out[h.id] = calculateHeatmapGrid(
+        dayOfYear,
+        yardHeadingDeg,
+        structures,
+        1,
+        heatmapInstanceBounds(h),
+      )
+    }
+    return out
+  }, [heatmaps, dayOfYear, yardHeadingDeg, structures])
 
   const bedAlerts = useMemo<BedAlert[]>(() => {
     const alerts: BedAlert[] = []
@@ -235,10 +241,45 @@ export default function App() {
 
   const dismissedCount = bedAlerts.length - activeBedAlerts.length
 
+  const handleAddHeatmap = useCallback(() => {
+    const num = nextHeatmapId++
+    const id = `heatmap-${num}`
+    const h = createDefaultHeatmap(id, `Heatmap ${num}`)
+    setHeatmaps((prev) => [...prev, h])
+    selectHeatmap(id)
+  }, [selectHeatmap])
+
+  const handleUpdateHeatmap = useCallback(
+    (id: string, patch: Partial<HeatmapInstance>) => {
+      setHeatmaps((prev) => prev.map((h) => (h.id === id ? { ...h, ...patch } : h)))
+    },
+    [],
+  )
+
+  const handleDeleteHeatmap = useCallback((id: string) => {
+    setHeatmaps((prev) => prev.filter((h) => h.id !== id))
+    setSelectedHeatmapId((cur) => (cur === id ? null : cur))
+  }, [])
+
   const handleTriggerSunHeatmap = useCallback(() => {
-    setHeatmapVisible(true)
-    setHeatmapMode('directSunHours')
-    setHeatmapOpacity(1)
+    setHeatmaps((prev) => {
+      if (prev.length === 0) {
+        const num = nextHeatmapId++
+        const id = `heatmap-${num}`
+        return [
+          {
+            ...createDefaultHeatmap(id, `Heatmap ${num}`),
+            mode: 'directSunHours',
+            opacity: 1,
+          },
+        ]
+      }
+      return prev.map((h, i) =>
+        i === 0
+          ? { ...h, visible: true, mode: 'directSunHours', opacity: 1 }
+          : h,
+      )
+    })
   }, [])
 
   // F3: Structure mutation callbacks
@@ -372,9 +413,6 @@ export default function App() {
       beds,
       showMeasurements,
       measurementUnit,
-      heatmapVisible,
-      heatmapMode,
-      heatmapOpacity,
       gardenItemsOpacity,
       showGrid,
       gridSpacing,
@@ -382,17 +420,14 @@ export default function App() {
       gridCenterZ,
       gridWidth,
       gridDepth,
-      heatmapCenterX,
-      heatmapCenterZ,
-      heatmapWidth,
-      heatmapDepth,
+      heatmaps,
     }),
     [
       layoutIdx, season, dayOfYear, hour, yardHeadingDeg, structures, beds,
-      showMeasurements, measurementUnit, heatmapVisible, heatmapMode,
-      heatmapOpacity, gardenItemsOpacity, showGrid, gridSpacing,
+      showMeasurements, measurementUnit,
+      gardenItemsOpacity, showGrid, gridSpacing,
       gridCenterX, gridCenterZ, gridWidth, gridDepth,
-      heatmapCenterX, heatmapCenterZ, heatmapWidth, heatmapDepth,
+      heatmaps,
     ],
   )
 
@@ -419,9 +454,6 @@ export default function App() {
     setBeds(migrateBeds(config.beds))
     setShowMeasurements(config.showMeasurements)
     setMeasurementUnit(config.measurementUnit as MeasurementUnit)
-    setHeatmapVisible(config.heatmapVisible)
-    setHeatmapMode(config.heatmapMode as HeatmapMode)
-    setHeatmapOpacity(config.heatmapOpacity)
     setGardenItemsOpacity(config.gardenItemsOpacity)
     setShowGrid(config.showGrid ?? false)
     setGridSpacing(config.gridSpacing ?? 1)
@@ -429,15 +461,15 @@ export default function App() {
     setGridCenterZ(config.gridCenterZ ?? 0)
     setGridWidth(config.gridWidth ?? _defaultGridWidth)
     setGridDepth(config.gridDepth ?? _defaultGridDepth)
-    setHeatmapCenterX(config.heatmapCenterX ?? _defaultHeatmapCenterX)
-    setHeatmapCenterZ(config.heatmapCenterZ ?? _defaultHeatmapCenterZ)
-    setHeatmapWidth(config.heatmapWidth ?? _defaultHeatmapWidth)
-    setHeatmapDepth(config.heatmapDepth ?? _defaultHeatmapDepth)
+    const migratedHeatmaps = migrateHeatmapsFromConfig(config)
+    setHeatmaps(migratedHeatmaps)
+    setSelectedHeatmapId(null)
     setSelectedId(null)
     setSelectedBedId(null)
     nextStructureId = maxCustomId(config.structures, 'custom-') + 1
     nextBedId = maxCustomId(config.beds, 'custom-bed-') + 1
-  }, [_defaultHeatmapCenterX, _defaultHeatmapCenterZ, _defaultHeatmapWidth, _defaultHeatmapDepth])
+    nextHeatmapId = maxCustomId(migratedHeatmaps, 'heatmap-') + 1
+  }, [])
 
   const sidebarRef = useRef<HTMLElement>(null)
 
@@ -655,160 +687,213 @@ export default function App() {
 
         <hr className="border-gray-700 mx-4" />
 
-        {/* Sun Heatmap */}
+        {/* Sun Heatmaps */}
         <section id="section-heatmap" className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Sun Heatmap
+              Sun Heatmaps
             </h2>
-            <label className="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={heatmapVisible}
-                onChange={(e) => setHeatmapVisible(e.target.checked)}
-                className="accent-amber-500"
-              />
-              Show
-            </label>
+            <button
+              onClick={handleAddHeatmap}
+              className="text-[10px] px-2 py-0.5 rounded bg-amber-700/70 hover:bg-amber-600 text-white font-medium transition-colors"
+              title="Add new heatmap"
+            >
+              + Add
+            </button>
           </div>
 
-          {heatmapVisible && (
-            <>
-              {/* Mode selector */}
-              <div className="grid grid-cols-2 gap-1 mb-2">
-                {HEATMAP_MODES.map((m) => (
-                  <button
-                    key={m.value}
-                    onClick={() => setHeatmapMode(m.value)}
-                    className={`px-2 py-1.5 rounded text-[10px] font-medium transition-colors ${
-                      heatmapMode === m.value
-                        ? 'bg-amber-700 text-white'
-                        : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+          {/* Garden items opacity (global) */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+              <span>Garden Items Opacity</span>
+              <span className="font-mono">{Math.round(gardenItemsOpacity * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={gardenItemsOpacity}
+              onChange={(e) => setGardenItemsOpacity(parseFloat(e.target.value))}
+              className="w-full accent-emerald-500"
+            />
+          </div>
 
-              {/* Heatmap opacity slider */}
-              <div className="mb-2">
-                <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
-                  <span>Heatmap Opacity</span>
-                  <span className="font-mono">{Math.round(heatmapOpacity * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0.1}
-                  max={0.9}
-                  step={0.05}
-                  value={heatmapOpacity}
-                  onChange={(e) => setHeatmapOpacity(parseFloat(e.target.value))}
-                  className="w-full accent-amber-500"
-                />
-              </div>
-
-              {/* Garden items opacity slider */}
-              <div className="mb-2">
-                <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
-                  <span>Garden Items Opacity</span>
-                  <span className="font-mono">{Math.round(gardenItemsOpacity * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={gardenItemsOpacity}
-                  onChange={(e) => setGardenItemsOpacity(parseFloat(e.target.value))}
-                  className="w-full accent-emerald-500"
-                />
-              </div>
-
-              {/* Heatmap area controls */}
-              <div className="mt-2 pt-2 border-t border-gray-700/60">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Area</span>
-                  <button
-                    onClick={() => {
-                      setHeatmapCenterX(_defaultHeatmapCenterX)
-                      setHeatmapCenterZ(_defaultHeatmapCenterZ)
-                      setHeatmapWidth(_defaultHeatmapWidth)
-                      setHeatmapDepth(_defaultHeatmapDepth)
-                    }}
-                    className="text-[9px] text-gray-500 hover:text-white transition-colors"
-                    title="Reset heatmap area to yard defaults"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 mb-1.5">
-                  <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
-                      cX
-                    </span>
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={heatmapCenterX}
-                      onChange={(e) => setHeatmapCenterX(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-gray-900 border border-gray-700 rounded pl-7 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
-                      cZ
-                    </span>
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={heatmapCenterZ}
-                      onChange={(e) => setHeatmapCenterZ(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-gray-900 border border-gray-700 rounded pl-7 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
-                    />
-                  </label>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
-                      W
-                    </span>
-                    <input
-                      type="number"
-                      step={1}
-                      min={2}
-                      value={heatmapWidth}
-                      onChange={(e) =>
-                        setHeatmapWidth(Math.max(2, parseFloat(e.target.value) || 2))
-                      }
-                      className="w-full bg-gray-900 border border-gray-700 rounded pl-6 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
-                      D
-                    </span>
-                    <input
-                      type="number"
-                      step={1}
-                      min={2}
-                      value={heatmapDepth}
-                      onChange={(e) =>
-                        setHeatmapDepth(Math.max(2, parseFloat(e.target.value) || 2))
-                      }
-                      className="w-full bg-gray-900 border border-gray-700 rounded pl-5 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
-                    />
-                  </label>
-                </div>
-                <p className="text-[9px] text-gray-600 mt-1 leading-tight">
-                  Bounds: x [{heatmapBounds.minX.toFixed(1)}, {heatmapBounds.maxX.toFixed(1)}] &middot; z [{heatmapBounds.minZ.toFixed(1)}, {heatmapBounds.maxZ.toFixed(1)}]
-                </p>
-              </div>
-
-              {/* Color legend */}
-              <HeatmapLegend mode={heatmapMode} grid={heatmapGrid} />
-            </>
+          {heatmaps.length === 0 && (
+            <div className="text-[10px] text-gray-500 italic py-2">
+              No heatmaps. Click + Add to create one.
+            </div>
           )}
+
+          {heatmaps.map((h) => {
+            const isSelected = h.id === selectedHeatmapId
+            const grid = heatmapGrids[h.id] ?? null
+            return (
+              <div
+                key={h.id}
+                className={`mb-2 rounded border transition-colors ${
+                  isSelected
+                    ? 'border-amber-500/70 bg-amber-900/10'
+                    : 'border-gray-700 bg-gray-800/40 hover:border-gray-600'
+                }`}
+              >
+                {/* Header row */}
+                <div className="flex items-center gap-1.5 px-2 py-1.5">
+                  <input
+                    type="checkbox"
+                    checked={h.visible}
+                    onChange={(e) =>
+                      handleUpdateHeatmap(h.id, { visible: e.target.checked })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className="accent-amber-500 flex-shrink-0"
+                    title="Show/hide"
+                  />
+                  <button
+                    onClick={() => selectHeatmap(isSelected ? null : h.id)}
+                    className="flex-1 text-left text-[11px] font-medium text-gray-200 truncate"
+                  >
+                    {h.name}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteHeatmap(h.id)}
+                    className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-1"
+                    title="Delete"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {isSelected && (
+                  <div className="px-2 pb-2 space-y-1.5 border-t border-gray-700/60 pt-2">
+                    {/* Name */}
+                    <input
+                      type="text"
+                      value={h.name}
+                      onChange={(e) =>
+                        handleUpdateHeatmap(h.id, { name: e.target.value })
+                      }
+                      className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[10px] focus:border-amber-500 focus:outline-none"
+                    />
+
+                    {/* Mode */}
+                    <div className="grid grid-cols-2 gap-1">
+                      {HEATMAP_MODES.map((m) => (
+                        <button
+                          key={m.value}
+                          onClick={() =>
+                            handleUpdateHeatmap(h.id, { mode: m.value })
+                          }
+                          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                            h.mode === m.value
+                              ? 'bg-amber-700 text-white'
+                              : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Opacity */}
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+                        <span>Opacity</span>
+                        <span className="font-mono">{Math.round(h.opacity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        value={h.opacity}
+                        onChange={(e) =>
+                          handleUpdateHeatmap(h.id, {
+                            opacity: parseFloat(e.target.value),
+                          })
+                        }
+                        className="w-full accent-amber-500"
+                      />
+                    </div>
+
+                    {/* Area */}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <label className="relative">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                          cX
+                        </span>
+                        <input
+                          type="number"
+                          step={0.5}
+                          value={h.centerX}
+                          onChange={(e) =>
+                            handleUpdateHeatmap(h.id, {
+                              centerX: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full bg-gray-900 border border-gray-700 rounded pl-7 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="relative">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                          cZ
+                        </span>
+                        <input
+                          type="number"
+                          step={0.5}
+                          value={h.centerZ}
+                          onChange={(e) =>
+                            handleUpdateHeatmap(h.id, {
+                              centerZ: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full bg-gray-900 border border-gray-700 rounded pl-7 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <label className="relative">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                          W
+                        </span>
+                        <input
+                          type="number"
+                          step={1}
+                          min={2}
+                          value={h.width}
+                          onChange={(e) =>
+                            handleUpdateHeatmap(h.id, {
+                              width: Math.max(2, parseFloat(e.target.value) || 2),
+                            })
+                          }
+                          className="w-full bg-gray-900 border border-gray-700 rounded pl-6 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
+                        />
+                      </label>
+                      <label className="relative">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                          D
+                        </span>
+                        <input
+                          type="number"
+                          step={1}
+                          min={2}
+                          value={h.depth}
+                          onChange={(e) =>
+                            handleUpdateHeatmap(h.id, {
+                              depth: Math.max(2, parseFloat(e.target.value) || 2),
+                            })
+                          }
+                          className="w-full bg-gray-900 border border-gray-700 rounded pl-5 pr-1 py-1 text-[10px] font-mono focus:border-amber-500 focus:outline-none"
+                        />
+                      </label>
+                    </div>
+
+                    {h.visible && <HeatmapLegend mode={h.mode} grid={grid} />}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </section>
 
         <hr className="border-gray-700 mx-4" />
@@ -1156,9 +1241,11 @@ export default function App() {
           sunProbeActive={sunProbeActive}
           sunProbePosition={sunProbePosition}
           onSunProbePlace={handleSunProbePlace}
-          heatmapGrid={heatmapGrid}
-          heatmapMode={heatmapMode}
-          heatmapOpacity={heatmapOpacity}
+          heatmaps={heatmaps}
+          heatmapGrids={heatmapGrids}
+          selectedHeatmapId={selectedHeatmapId}
+          onSelectHeatmap={selectHeatmap}
+          onUpdateHeatmap={handleUpdateHeatmap}
           gardenItemsOpacity={gardenItemsOpacity}
           showGrid={showGrid}
           gridSpacing={gridSpacing}
@@ -1166,8 +1253,6 @@ export default function App() {
           gridCenterZ={gridCenterZ}
           gridWidth={gridWidth}
           gridDepth={gridDepth}
-          heatmapBounds={heatmapBounds}
-          heatmapBoundsVisible={heatmapVisible}
         />
 
         {/* HUD overlay */}
