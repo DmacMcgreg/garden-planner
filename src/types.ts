@@ -1,3 +1,5 @@
+import type { HeatmapInstance } from './sun'
+
 // Garden bed interfaces (moved from layouts.ts)
 export interface BedConfig {
   id: string
@@ -156,6 +158,34 @@ export function migrateBeds(beds: BedConfig[]): BedConfig[] {
   })
 }
 
+export function migrateHeatmapsFromConfig(config: GardenConfig): HeatmapInstance[] {
+  if (config.heatmaps && config.heatmaps.length > 0) return config.heatmaps
+  if (
+    config.heatmapVisible === undefined &&
+    config.heatmapCenterX === undefined
+  ) {
+    return []
+  }
+  const centerX = config.heatmapCenterX ?? 0
+  const centerZ = config.heatmapCenterZ ?? 1
+  const width = config.heatmapWidth ?? 28
+  const depth = config.heatmapDepth ?? 16
+  const legacyMode = (config.heatmapMode as HeatmapInstance['mode']) ?? 'energyRating'
+  return [
+    {
+      id: 'heatmap-1',
+      name: 'Heatmap 1',
+      visible: config.heatmapVisible ?? false,
+      mode: legacyMode,
+      opacity: config.heatmapOpacity ?? 0.55,
+      centerX,
+      centerZ,
+      width,
+      depth,
+    },
+  ]
+}
+
 export function getMinSunHoursForBed(bed: BedConfig): number {
   if (bed.plantType) return PLANT_PRESETS[bed.plantType].minSunHours
   return bed.sunNeeds === 'full' ? 6 : bed.sunNeeds === 'partial' ? 4 : 3
@@ -189,9 +219,6 @@ export interface GardenConfig {
   beds: BedConfig[]
   showMeasurements: boolean
   measurementUnit: MeasurementUnit
-  heatmapVisible: boolean
-  heatmapMode: string
-  heatmapOpacity: number
   gardenItemsOpacity: number
   showGrid?: boolean
   gridSpacing?: number
@@ -199,6 +226,12 @@ export interface GardenConfig {
   gridCenterZ?: number
   gridWidth?: number
   gridDepth?: number
+  // Multi-heatmap (current format)
+  heatmaps?: HeatmapInstance[]
+  // Legacy single-heatmap fields (pre multi-heatmap; migrated on load)
+  heatmapVisible?: boolean
+  heatmapMode?: string
+  heatmapOpacity?: number
   heatmapCenterX?: number
   heatmapCenterZ?: number
   heatmapWidth?: number

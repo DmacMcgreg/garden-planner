@@ -406,6 +406,41 @@ export const DEFAULT_HEATMAP_BOUNDS: HeatmapBounds = {
   maxZ: 9,
 };
 
+export interface HeatmapInstance {
+  id: string;
+  name: string;
+  visible: boolean;
+  mode: HeatmapMode;
+  opacity: number;
+  centerX: number;
+  centerZ: number;
+  width: number;
+  depth: number;
+}
+
+export function heatmapInstanceBounds(h: HeatmapInstance): HeatmapBounds {
+  return {
+    minX: h.centerX - h.width / 2,
+    maxX: h.centerX + h.width / 2,
+    minZ: h.centerZ - h.depth / 2,
+    maxZ: h.centerZ + h.depth / 2,
+  };
+}
+
+export function createDefaultHeatmap(id: string, name: string): HeatmapInstance {
+  return {
+    id,
+    name,
+    visible: true,
+    mode: 'energyRating',
+    opacity: 0.55,
+    centerX: (DEFAULT_HEATMAP_BOUNDS.minX + DEFAULT_HEATMAP_BOUNDS.maxX) / 2,
+    centerZ: (DEFAULT_HEATMAP_BOUNDS.minZ + DEFAULT_HEATMAP_BOUNDS.maxZ) / 2,
+    width: DEFAULT_HEATMAP_BOUNDS.maxX - DEFAULT_HEATMAP_BOUNDS.minX,
+    depth: DEFAULT_HEATMAP_BOUNDS.maxZ - DEFAULT_HEATMAP_BOUNDS.minZ,
+  };
+}
+
 /**
  * Calculate a grid of sun exposure values across the yard area.
  * Optimized: precomputes sun positions and casters once, then iterates per cell.
