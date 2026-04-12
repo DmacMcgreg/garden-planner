@@ -103,7 +103,7 @@ export default function BedPanel({
         <select
           value={addType}
           onChange={(e) => setAddType(e.target.value as PlantType)}
-          className="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
+          className="flex-1 min-w-0 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
         >
           {PLANT_CATEGORIES.map((cat) => (
             <optgroup key={cat.key} label={cat.label}>
@@ -111,7 +111,7 @@ export default function BedPanel({
                 .filter(([, p]) => p.category === cat.key)
                 .map(([key, p]) => (
                   <option key={key} value={key}>
-                    {SUN_EMOJI[p.sunNeeds]} {p.name} (pH {p.phRange[0]}-{p.phRange[1]})
+                    {SUN_EMOJI[p.sunNeeds]} {p.name} (pH {p.phRange[0]}-{p.phRange[1]}, {p.minSunHours}+ PSH)
                   </option>
                 ))}
             </optgroup>
