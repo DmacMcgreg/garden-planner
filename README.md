@@ -34,6 +34,16 @@ It started as a planner for a 24 × 10 ft backyard in Ontario and has grown into
 - **Structures with shadows.** Add buildings, sheds, fences, and trellises. Position, size, color, and shadow-casting are all editable.
 - **Save / load configs.** Named configs persist to localStorage with JSON export/import. Location and heatmap state round-trip cleanly.
 
+## Demo
+
+<div align="center">
+
+<img src="presentation/garden-planner.gif" alt="Garden Planner demo" width="720" />
+
+*Scrubbing through the day, toggling heatmap, and rearranging beds in real time.*
+
+</div>
+
 ## Screenshots
 
 <div align="center">
