@@ -8,6 +8,8 @@
 
 Pick any of 1000 world cities, scrub through the day or the season, and see exactly where your garden beds get light — shadows cast from buildings and fences included.
 
+### [Live demo → garden-planner-3d.vercel.app](https://garden-planner-3d.vercel.app)
+
 ![built with](https://img.shields.io/badge/built_with-React_18-61dafb)
 ![typescript](https://img.shields.io/badge/TypeScript-5-3178c6)
 ![three.js](https://img.shields.io/badge/three.js-r169-000000)
