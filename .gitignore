@@ -6,5 +6,6 @@ dist/
 .env.local
 .vite/
 
-# Stray screenshot artifact
+# Stray screenshot artifacts
 --clip
+/01-main-view.png
