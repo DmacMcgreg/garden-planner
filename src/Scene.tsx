@@ -10,6 +10,7 @@ import {
   type SunPosition,
   type HeatmapGrid,
   type HeatmapMode,
+  type HeatmapInstance,
 } from './sun'
 import type { LayoutConfig, BedConfig, PathConfig, PanelConfig } from './layouts'
 import { PLANT_PRESETS } from './types'
@@ -43,9 +44,11 @@ interface SceneProps {
   sunProbeActive: boolean
   sunProbePosition: { x: number; z: number } | null
   onSunProbePlace: (x: number, z: number) => void
-  heatmapGrid: HeatmapGrid | null
-  heatmapMode: HeatmapMode
-  heatmapOpacity: number
+  heatmaps: HeatmapInstance[]
+  heatmapGrids: Record<string, HeatmapGrid>
+  selectedHeatmapId: string | null
+  onSelectHeatmap: (id: string | null) => void
+  onUpdateHeatmap: (id: string, patch: Partial<HeatmapInstance>) => void
   gardenItemsOpacity: number
   showGrid: boolean
   gridSpacing: number
@@ -53,8 +56,6 @@ interface SceneProps {
   gridCenterZ: number
   gridWidth: number
   gridDepth: number
-  heatmapBounds: { minX: number; maxX: number; minZ: number; maxZ: number }
-  heatmapBoundsVisible: boolean
 }
 
 export default function GardenScene(props: SceneProps) {
@@ -68,6 +69,7 @@ export default function GardenScene(props: SceneProps) {
         if (!props.sunProbeActive) {
           props.onSelectStructure(null)
           props.onSelectBed(null)
+          props.onSelectHeatmap(null)
         }
       }}
     >
@@ -97,9 +99,11 @@ function SceneContent({
   sunProbeActive,
   sunProbePosition,
   onSunProbePlace,
-  heatmapGrid,
-  heatmapMode,
-  heatmapOpacity,
+  heatmaps,
+  heatmapGrids,
+  selectedHeatmapId,
+  onSelectHeatmap,
+  onUpdateHeatmap,
   gardenItemsOpacity,
   showGrid,
   gridSpacing,
@@ -107,8 +111,6 @@ function SceneContent({
   gridCenterZ,
   gridWidth,
   gridDepth,
-  heatmapBounds,
-  heatmapBoundsVisible,
 }: SceneProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const lastAz = useRef(0)
@@ -259,19 +261,31 @@ function SceneContent({
         />
       )}
 
-      {/* ---- Sun heatmap overlay ---- */}
-      {heatmapGrid && (
-        <SunHeatmapOverlay
-          grid={heatmapGrid}
-          mode={heatmapMode}
-          opacity={heatmapOpacity}
-        />
-      )}
-
-      {/* ---- Heatmap area outline (shown while editing even when heatmap off) ---- */}
-      {heatmapBoundsVisible && (
-        <HeatmapBoundsOutline bounds={heatmapBounds} />
-      )}
+      {/* ---- Sun heatmap overlays (multiple) ---- */}
+      {heatmaps.map((h, i) => {
+        const grid = heatmapGrids[h.id]
+        const isSelected = h.id === selectedHeatmapId
+        return (
+          <group key={h.id}>
+            {h.visible && grid && (
+              <SunHeatmapOverlay
+                grid={grid}
+                mode={h.mode}
+                opacity={h.opacity}
+                yOffset={0.04 + i * 0.002}
+              />
+            )}
+            <HeatmapGizmo
+              heatmap={h}
+              isSelected={isSelected}
+              probing={sunProbeActive}
+              orbitControlsRef={controlsRef}
+              onSelect={onSelectHeatmap}
+              onUpdate={onUpdateHeatmap}
+            />
+          </group>
+        )
+      })}
 
       {/* ---- F3: Data-driven structures ---- */}
       {structures.map((s) =>
@@ -878,7 +892,7 @@ function GardenBed({
           {bed.sunNeeds === 'full' ? '\u2600\uFE0F ' : bed.sunNeeds === 'partial' ? '\uD83C\uDF24\uFE0F ' : '\u26C5 '}{bed.name}
           {isSelected && bed.plantType && (
             <div style={{ fontSize: '9px', opacity: 0.7, marginTop: '1px' }}>
-              pH {PLANT_PRESETS[bed.plantType].phRange[0]}&ndash;{PLANT_PRESETS[bed.plantType].phRange[1]}
+              pH {PLANT_PRESETS[bed.plantType].phRange[0]}&ndash;{PLANT_PRESETS[bed.plantType].phRange[1]} &middot; {PLANT_PRESETS[bed.plantType].minSunHours}+ PSH
             </div>
           )}
         </div>
@@ -1160,10 +1174,12 @@ function SunHeatmapOverlay({
   grid,
   mode,
   opacity,
+  yOffset = 0.04,
 }: {
   grid: HeatmapGrid
   mode: HeatmapMode
   opacity: number
+  yOffset?: number
 }) {
   const texture = useMemo(() => {
     const { cols, rows } = grid;
@@ -1226,7 +1242,7 @@ function SunHeatmapOverlay({
   return (
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[centerX, 0.04, centerZ]}
+      position={[centerX, yOffset, centerZ]}
     >
       <planeGeometry args={[width, depth]} />
       <meshBasicMaterial
@@ -1240,52 +1256,284 @@ function SunHeatmapOverlay({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Heatmap Bounds Outline (editing indicator)                        */
+/*  Heatmap Gizmo (click-to-select + drag move + edge resize)         */
 /* ------------------------------------------------------------------ */
 
-function HeatmapBoundsOutline({
-  bounds,
+interface HeatmapDragState {
+  mode: 'translate' | 'resize'
+  edge?: ResizeEdge
+  startPoint: Vector3
+  startCenterX: number
+  startCenterZ: number
+  startWidth: number
+  startDepth: number
+  lastPatch: Partial<HeatmapInstance>
+}
+
+function HeatmapGizmo({
+  heatmap,
+  isSelected,
+  probing,
+  orbitControlsRef,
+  onSelect,
+  onUpdate,
 }: {
-  bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
+  heatmap: HeatmapInstance
+  isSelected: boolean
+  probing: boolean
+  orbitControlsRef: React.RefObject<OrbitControlsImpl | null>
+  onSelect: (id: string | null) => void
+  onUpdate: (id: string, patch: Partial<HeatmapInstance>) => void
 }) {
-  const { minX, maxX, minZ, maxZ } = bounds
-  const y = 0.06
-  const points: [number, number, number][] = [
-    [minX, y, minZ],
-    [maxX, y, minZ],
-    [maxX, y, maxZ],
-    [minX, y, maxZ],
-    [minX, y, minZ],
+  const { camera, gl } = useThree()
+  const dragRef = useRef<HeatmapDragState | null>(null)
+  const [localPatch, setLocalPatch] = useState<Partial<HeatmapInstance> | null>(null)
+  const raycasterRef = useRef(new Raycaster())
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  const heatmapRef = useRef(heatmap)
+  heatmapRef.current = heatmap
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  const display = localPatch ? { ...heatmap, ...localPatch } : heatmap
+  const { centerX, centerZ, width, depth } = display
+  const minX = centerX - width / 2
+  const maxX = centerX + width / 2
+  const minZ = centerZ - depth / 2
+  const maxZ = centerZ + depth / 2
+
+  function groundPoint(e: PointerEvent): Vector3 | null {
+    const rect = gl.domElement.getBoundingClientRect()
+    const ndc = new Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    raycasterRef.current.setFromCamera(ndc, camera)
+    const target = new Vector3()
+    return raycasterRef.current.ray.intersectPlane(GROUND_PLANE, target) ? target : null
+  }
+
+  function startDrag(
+    e: { stopPropagation: () => void; nativeEvent: PointerEvent; point: Vector3 },
+    mode: 'translate' | 'resize',
+    edge?: ResizeEdge,
+  ) {
+    e.stopPropagation()
+    e.nativeEvent.stopImmediatePropagation()
+    if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
+    const point = new Vector3(e.point.x, 0, e.point.z)
+    const h = heatmapRef.current
+    dragRef.current = {
+      mode,
+      edge,
+      startPoint: point.clone(),
+      startCenterX: h.centerX,
+      startCenterZ: h.centerZ,
+      startWidth: h.width,
+      startDepth: h.depth,
+      lastPatch: {},
+    }
+  }
+
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      const ds = dragRef.current
+      if (!ds) return
+      const point = groundPoint(e)
+      if (!point) return
+
+      const snap = (v: number) => Math.round(v * 2) / 2
+      let patch: Partial<HeatmapInstance> = {}
+
+      if (ds.mode === 'translate') {
+        const dx = point.x - ds.startPoint.x
+        const dz = point.z - ds.startPoint.z
+        patch = {
+          centerX: snap(ds.startCenterX + dx),
+          centerZ: snap(ds.startCenterZ + dz),
+        }
+      } else if (ds.mode === 'resize' && ds.edge) {
+        const dx = point.x - ds.startPoint.x
+        const dz = point.z - ds.startPoint.z
+
+        let ePlusX = ds.startCenterX + ds.startWidth / 2
+        let eMinusX = ds.startCenterX - ds.startWidth / 2
+        let ePlusZ = ds.startCenterZ + ds.startDepth / 2
+        let eMinusZ = ds.startCenterZ - ds.startDepth / 2
+
+        if (ds.edge === 'x+') ePlusX += dx
+        else if (ds.edge === 'x-') eMinusX += dx
+        else if (ds.edge === 'z+') ePlusZ += dz
+        else if (ds.edge === 'z-') eMinusZ += dz
+
+        if (ePlusX - eMinusX < 2) {
+          if (ds.edge === 'x+') ePlusX = eMinusX + 2
+          else if (ds.edge === 'x-') eMinusX = ePlusX - 2
+        }
+        if (ePlusZ - eMinusZ < 2) {
+          if (ds.edge === 'z+') ePlusZ = eMinusZ + 2
+          else if (ds.edge === 'z-') eMinusZ = ePlusZ - 2
+        }
+
+        patch = {
+          width: snap(ePlusX - eMinusX),
+          depth: snap(ePlusZ - eMinusZ),
+          centerX: snap((ePlusX + eMinusX) / 2),
+          centerZ: snap((ePlusZ + eMinusZ) / 2),
+        }
+      }
+
+      ds.lastPatch = patch
+      setLocalPatch(patch)
+    }
+
+    const handleUp = () => {
+      const ds = dragRef.current
+      if (!ds) return
+      const patch = ds.lastPatch
+      if (Object.keys(patch).length > 0) {
+        onUpdateRef.current(heatmapRef.current.id, patch)
+      }
+      dragRef.current = null
+      setLocalPatch(null)
+      if (orbitControlsRef.current) orbitControlsRef.current.enabled = true
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, gl, orbitControlsRef])
+
+  const outlineColor = isSelected ? '#fbbf24' : '#38bdf8'
+  const handleColor = (id: string, base: string) => hovered === id ? '#ffffff' : base
+  const outlineY = 0.06
+  const handleY = 0.12
+  const outlinePoints: [number, number, number][] = [
+    [minX, outlineY, minZ],
+    [maxX, outlineY, minZ],
+    [maxX, outlineY, maxZ],
+    [minX, outlineY, maxZ],
+    [minX, outlineY, minZ],
   ]
+
   return (
     <>
+      {/* Dashed outline */}
       <Line
-        points={points}
-        color="#38bdf8"
-        lineWidth={2}
+        points={outlinePoints}
+        color={outlineColor}
+        lineWidth={isSelected ? 2.5 : 1.5}
         dashed
         dashSize={0.6}
         gapSize={0.3}
       />
+
+      {/* Invisible click/drag plane at bounds (for selection when not selected, for move when selected) */}
+      {!probing && (
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[centerX, 0.03, centerZ]}
+          onPointerDown={(e) => {
+            if (!isSelected) {
+              e.stopPropagation()
+              onSelect(heatmap.id)
+              return
+            }
+            startDrag(e, 'translate')
+          }}
+          onPointerEnter={() => {
+            gl.domElement.style.cursor = isSelected ? 'move' : 'pointer'
+          }}
+          onPointerLeave={() => {
+            gl.domElement.style.cursor = 'auto'
+          }}
+        >
+          <planeGeometry args={[width, depth]} />
+          <meshBasicMaterial
+            color="#fbbf24"
+            transparent
+            opacity={0}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* Edge resize handles (only when selected) */}
+      {isSelected && !probing && (
+        <>
+          {([
+            ['x+', maxX, centerZ],
+            ['x-', minX, centerZ],
+            ['z+', centerX, maxZ],
+            ['z-', centerX, minZ],
+          ] as [ResizeEdge, number, number][]).map(([edge, hx, hz]) => {
+            const isX = edge.startsWith('x')
+            const barLen = Math.min(isX ? depth * 0.6 : width * 0.6, 2.5)
+            return (
+              <mesh
+                key={edge}
+                position={[hx, handleY, hz]}
+                onPointerDown={(e) => startDrag(e, 'resize', edge)}
+                onPointerEnter={() => {
+                  setHovered(edge)
+                  gl.domElement.style.cursor = isX ? 'ew-resize' : 'ns-resize'
+                }}
+                onPointerLeave={() => {
+                  setHovered(null)
+                  gl.domElement.style.cursor = 'auto'
+                }}
+              >
+                <boxGeometry args={[isX ? 0.3 : barLen, 0.25, isX ? barLen : 0.3]} />
+                <meshStandardMaterial
+                  color={handleColor(edge, '#fbbf24')}
+                  emissive={handleColor(edge, '#fbbf24')}
+                  emissiveIntensity={0.6}
+                  transparent
+                  opacity={0.95}
+                />
+              </mesh>
+            )
+          })}
+
+          {/* Center move indicator */}
+          <mesh position={[centerX, handleY, centerZ]}>
+            <sphereGeometry args={[0.28, 16, 16]} />
+            <meshStandardMaterial
+              color="#fbbf24"
+              emissive="#fbbf24"
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0.85}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* Label */}
       <Html
-        position={[(minX + maxX) / 2, 0.15, maxZ + 0.4]}
+        position={[centerX, 0.15, maxZ + 0.4]}
         center
         style={{ pointerEvents: 'none' }}
       >
         <div
           style={{
             background: 'rgba(0,0,0,0.75)',
-            color: '#7dd3fc',
+            color: isSelected ? '#fde68a' : '#7dd3fc',
             padding: '2px 8px',
             borderRadius: '4px',
             fontSize: '10px',
             fontFamily: 'ui-monospace, monospace',
             fontWeight: 600,
             whiteSpace: 'nowrap',
-            border: '1px solid rgba(125,211,252,0.5)',
+            border: `1px solid ${isSelected ? 'rgba(253,224,71,0.6)' : 'rgba(125,211,252,0.5)'}`,
           }}
         >
-          Heatmap area {(maxX - minX).toFixed(1)} x {(maxZ - minZ).toFixed(1)} ft
+          {heatmap.name} · {width.toFixed(1)} x {depth.toFixed(1)} ft
         </div>
       </Html>
     </>
