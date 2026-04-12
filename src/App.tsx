@@ -1661,16 +1661,6 @@ function CompassRose({
             stroke="#9e9e9e"
             strokeWidth="0.5"
           />
-          <text
-            x="0"
-            y="2.5"
-            textAnchor="middle"
-            fill="#c5e1a5"
-            fontSize="5.5"
-            fontWeight="600"
-          >
-            YARD
-          </text>
         </g>
 
         {/* Sun position dot */}
