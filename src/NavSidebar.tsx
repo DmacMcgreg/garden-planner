@@ -17,18 +17,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: 'section-layout',
-    label: 'Layout',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-        <rect x="3" y="3" width="7" height="7" />
-        <rect x="14" y="3" width="7" height="7" />
-        <rect x="14" y="14" width="7" height="7" />
-        <rect x="3" y="14" width="7" height="7" />
-      </svg>
-    ),
-  },
-  {
     id: 'section-season',
     label: 'Season',
     icon: (
@@ -135,20 +123,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: 'section-legend',
-    label: 'Legend',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-        <line x1="8" y1="6" x2="21" y2="6" />
-        <line x1="8" y1="12" x2="21" y2="12" />
-        <line x1="8" y1="18" x2="21" y2="18" />
-        <rect x="3" y="4.5" width="3" height="3" rx="0.5" fill="currentColor" />
-        <rect x="3" y="10.5" width="3" height="3" rx="0.5" fill="currentColor" />
-        <rect x="3" y="16.5" width="3" height="3" rx="0.5" fill="currentColor" />
-      </svg>
-    ),
-  },
-  {
     id: 'section-structures',
     label: 'Structs',
     icon: (
@@ -183,7 +157,7 @@ export default function NavSidebar({ sidebarRef }: NavSidebarProps) {
         <button
           key={item.id}
           onClick={() => scrollTo(item.id)}
-          className="flex flex-col items-center justify-center w-14 py-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800/60 transition-colors"
+          className="flex flex-col items-center justify-center w-14 py-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition-colors"
           title={item.label}
         >
           {item.icon}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { BedConfig, BedAlert, PlantType } from './types'
 import { PLANT_PRESETS, PLANT_CATEGORIES } from './types'
+import { SectionHeader, IconSprout } from './SectionHeader'
 
 const SUN_EMOJI: Record<BedConfig['sunNeeds'], string> = {
   full: '\u2600\uFE0F',
@@ -54,9 +55,7 @@ export default function BedPanel({
 
   return (
     <section className="px-4 py-3">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-        Garden Beds
-      </h2>
+      <SectionHeader icon={<IconSprout />} title="Garden Beds" />
 
       {/* Bed list */}
       <div ref={listRef} className="space-y-1 mb-3 max-h-40 overflow-y-auto">

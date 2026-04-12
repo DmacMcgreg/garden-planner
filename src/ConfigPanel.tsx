@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import type { GardenConfig } from './types'
+import { SectionHeader, IconSave } from './SectionHeader'
 import {
   loadSavedConfigs,
   saveConfigToStorage,
@@ -116,9 +117,7 @@ export default function ConfigPanel({
 
   return (
     <section className="px-4 py-3">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-        Save / Load
-      </h2>
+      <SectionHeader icon={<IconSave />} title="Save / Load" />
 
       {/* Flash message */}
       {flashMessage && (

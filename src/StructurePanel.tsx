@@ -1,5 +1,5 @@
 import type { Structure, StructureType } from './types'
-import { DEFAULT_STRUCTURES } from './types'
+import { SectionHeader, IconHouse } from './SectionHeader'
 
 interface StructurePanelProps {
   structures: Structure[]
@@ -24,9 +24,7 @@ export default function StructurePanel({
 
   return (
     <section className="px-4 py-3">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-        Structures
-      </h2>
+      <SectionHeader icon={<IconHouse />} title="Structures" />
 
       {/* Structure list */}
       <div className="space-y-1 mb-3">

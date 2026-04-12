@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { BedConfig, BedAlert } from './types'
 import { PLANT_PRESETS } from './types'
+import { SectionHeader, IconBell } from './SectionHeader'
 
 interface AlertPanelProps {
   alerts: BedAlert[]
@@ -99,9 +100,7 @@ export default function AlertPanel({
       {expanded && (
         <div className="absolute top-full right-0 mt-2 w-80 max-h-80 overflow-y-auto bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl">
           <div className="px-3 py-2 border-b border-gray-700">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Plant Alerts
-            </h3>
+            <SectionHeader icon={<IconBell />} title="Plant Alerts" />
           </div>
           <div className="py-1">
             {alerts.length === 0 ? (
