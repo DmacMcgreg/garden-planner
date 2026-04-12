@@ -52,9 +52,9 @@ It started as a planner for a 24 × 10 ft backyard in Ontario and has grown into
 
 *Main view — sun arc, garden beds, structures, and the sidebar in default framing.*
 
-<img src="presentation/screenshots/02-heatmap-toggled.png" alt="Sun heatmap overlay" width="720" />
+<img src="presentation/screenshots/08-heatmap-detail.png" alt="Peak-sun-hours heatmap with labeled beds" width="720" />
 
-*Peak-sun-hours heatmap overlay showing where the yard gets the most light.*
+*Peak-sun-hours heatmap overlay with labeled beds — red zones get the most direct sun, blue zones are shaded by the fence and cold frame. Exactly the kind of map you need to decide where tomatoes go vs. kale.*
 
 <img src="presentation/screenshots/07-morning-shadows.png" alt="Morning shadow cast" width="720" />
 
