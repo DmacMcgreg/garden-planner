@@ -22,11 +22,11 @@ Pick any of 1000 world cities, scrub through the day or the season, and see exac
 
 Garden Planner is an interactive 3D tool for planning a garden in a specific physical space. You model your yard, drop in beds and structures, pick your location, and the app computes real sun exposure — cast shadows, peak sun hours, and all — so you can decide where a sun-hungry tomato will actually thrive and where the kale should go.
 
-It started as a planner for a 24 × 10 ft backyard in Toronto and has grown into a general-purpose tool that works anywhere in the world.
+It started as a planner for a 24 × 10 ft backyard in Ontario and has grown into a general-purpose tool that works anywhere in the world.
 
 ## Features
 
-- **Worldwide sun math.** Pick any of 1000 large cities (sourced from GeoNames). The app computes latitude, longitude, and DST-aware timezone offsets, and corrects clock time to apparent solar time using the [Equation of Time](https://en.wikipedia.org/wiki/Equation_of_time). Solar noon lands where it actually should — ~13:19 in Toronto on the summer solstice, not 12:00.
+- **Worldwide sun math.** Pick any of 1000 large cities (sourced from GeoNames). The app computes latitude, longitude, and DST-aware timezone offsets, and corrects clock time to apparent solar time using the [Equation of Time](https://en.wikipedia.org/wiki/Equation_of_time). Solar noon lands where it actually should — ~13:19 in Ontario on the summer solstice, not 12:00.
 - **3D scene.** Interactive canvas built on `@react-three/fiber` with orbit/pan/zoom, selectable beds and structures, drag-to-move transform gizmos, and measurement labels.
 - **Sun path visualization.** Watch the sun arc through the sky for any day of the year. A configurable viz dome keeps the arc at a comfortable viewing distance.
 - **Shadow-aware heatmaps.** Ray-AABB shadow casting against user-placed buildings and fences, plus a multi-instance heatmap overlay that shows direct sun hours, peak sun hours, peak intensity, or energy rating across any rectangular region.
@@ -132,4 +132,6 @@ City data is derived from [GeoNames cities15000](https://www.geonames.org/) (top
 
 ## License
 
-No license file yet — treat as all rights reserved until one is added. If you want to use the solar math or city data for something, open an issue.
+MIT — see [LICENSE](LICENSE).
+
+Note that the city data shipped in `src/cities.ts` is derived from GeoNames and remains under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is preserved in the file header.
