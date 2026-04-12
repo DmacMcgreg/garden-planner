@@ -1638,31 +1638,6 @@ function CompassRose({
         <text x="0" y="44" textAnchor="middle" fill="#d1d5db" fontSize="8" fontWeight="bold">S</text>
         <text x="-38" y="3.5" textAnchor="middle" fill="#d1d5db" fontSize="8" fontWeight="bold">W</text>
 
-        {/* Yard rectangle (rotated to dynamic heading) */}
-        <g transform={`rotate(${yardHeadingDeg})`}>
-          <rect
-            x="-22"
-            y="-8"
-            width="44"
-            height="16"
-            rx="1.5"
-            fill="rgba(74,124,74,0.5)"
-            stroke="#7cb342"
-            strokeWidth="1"
-          />
-          {/* House indicator */}
-          <rect
-            x="22"
-            y="-10"
-            width="6"
-            height="20"
-            rx="1"
-            fill="rgba(120,113,108,0.7)"
-            stroke="#9e9e9e"
-            strokeWidth="0.5"
-          />
-        </g>
-
         {/* Sun position dot */}
         {sunAzimuth >= 0 && (
           <g transform={`rotate(${sunAzimuth})`}>
