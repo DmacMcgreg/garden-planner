@@ -1,11 +1,45 @@
-// Sun position calculations for Ontario, Canada (~43.7N latitude)
-// Yard orientation: long axis runs ENE (67.5deg) to WSW (247.5deg)
+// Sun position calculations — latitude- and longitude-parameterized,
+// with DST-aware time correction from clock time to apparent solar time.
 
-const LATITUDE = 43.7;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
 export const DEFAULT_YARD_HEADING = 67.5;
+
+export interface SunLocation {
+  /** Degrees, positive N. */
+  latitude: number;
+  /** Degrees, positive E. */
+  longitude: number;
+  /** Signed UTC offset in hours at the current date, DST-resolved. */
+  tzOffsetHours: number;
+}
+
+export const DEFAULT_LATITUDE = 43.7;
+export const DEFAULT_LONGITUDE = -79.4;
+export const DEFAULT_LOCATION: SunLocation = {
+  latitude: DEFAULT_LATITUDE,
+  longitude: DEFAULT_LONGITUDE,
+  tzOffsetHours: -5,
+};
+
+/**
+ * Convert civil clock time to apparent solar time for the given location and day.
+ * Accounts for longitude offset from the time-zone meridian and the Equation of Time.
+ */
+function apparentSolarHour(
+  clockHour: number,
+  dayOfYear: number,
+  longitude: number,
+  tzOffsetHours: number,
+): number {
+  // Spencer-derived Equation of Time approximation, in minutes.
+  const B = ((360 / 365) * (dayOfYear - 81)) * DEG2RAD;
+  const eotMinutes = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+  const lstmDeg = 15 * tzOffsetHours;
+  const timeCorrectionMin = 4 * (longitude - lstmDeg) + eotMinutes;
+  return clockHour + timeCorrectionMin / 60;
+}
 
 export interface SunPosition {
   azimuthDeg: number;   // compass degrees (0=N, 90=E, 180=S, 270=W)
@@ -17,15 +51,21 @@ export interface SunPosition {
   intensity: number;    // light intensity 0-1.5
 }
 
-export function getSunPosition(dayOfYear: number, hour: number, yardHeadingDeg: number = DEFAULT_YARD_HEADING): SunPosition {
-  const latRad = LATITUDE * DEG2RAD;
+export function getSunPosition(
+  dayOfYear: number,
+  hour: number,
+  yardHeadingDeg: number = DEFAULT_YARD_HEADING,
+  location: SunLocation = DEFAULT_LOCATION,
+): SunPosition {
+  const latRad = location.latitude * DEG2RAD;
 
   // Solar declination (angle of sun relative to equatorial plane)
   const declination = 23.45 * Math.sin((2 * Math.PI / 365) * (284 + dayOfYear));
   const decRad = declination * DEG2RAD;
 
-  // Hour angle (15 degrees per hour from solar noon)
-  const hourAngle = 15 * (hour - 12);
+  // Hour angle (15 degrees per hour from apparent solar noon)
+  const solarHour = apparentSolarHour(hour, dayOfYear, location.longitude, location.tzOffsetHours);
+  const hourAngle = 15 * (solarHour - 12);
   const hourRad = hourAngle * DEG2RAD;
 
   // Solar altitude (elevation above horizon)
@@ -293,6 +333,7 @@ function isPointInShadow(
  * @param dayOfYear - Day of year (1-365)
  * @param yardHeadingDeg - Garden orientation in degrees
  * @param structures - Array of {position, size, castShadow} objects
+ * @param location - Geographic location and DST-resolved tz offset
  * @returns Full exposure analysis for the day
  */
 export function calculateSunExposure(
@@ -301,6 +342,7 @@ export function calculateSunExposure(
   dayOfYear: number,
   yardHeadingDeg: number,
   structures: { position: [number, number, number]; size: [number, number, number]; castShadow: boolean }[],
+  location: SunLocation = DEFAULT_LOCATION,
 ): SunExposureResult {
   const TIME_STEP = 0.25; // 15-minute increments
   const START_HOUR = 4;
@@ -318,7 +360,7 @@ export function calculateSunExposure(
   let peakHour = 12;
 
   for (let h = START_HOUR; h <= END_HOUR; h += TIME_STEP) {
-    const sun = getSunPosition(dayOfYear, h, yardHeadingDeg);
+    const sun = getSunPosition(dayOfYear, h, yardHeadingDeg, location);
 
     if (!sun.isAboveHorizon) continue;
 
@@ -350,7 +392,7 @@ export function calculateSunExposure(
   }
 
   // Energy rating: 0-10 scale based on peak sun hours
-  // Summer solstice at 43.7N with no obstructions yields ~7-8 PSH
+  // Summer solstice at mid-latitude with no obstructions yields ~7-8 PSH
   // Scale: 0 PSH = 0, 8+ PSH = 10
   const energyRating = Math.min(10, (peakSunHours / 8) * 10);
 
@@ -450,6 +492,7 @@ export function createDefaultHeatmap(id: string, name: string): HeatmapInstance 
  * @param structures - Shadow-casting structures
  * @param resolution - Grid cell size in feet (default 1)
  * @param bounds - Optional world-space bounds (defaults to DEFAULT_HEATMAP_BOUNDS)
+ * @param location - Geographic location and DST-resolved tz offset
  * @returns Grid with per-metric arrays for heatmap rendering
  */
 export function calculateHeatmapGrid(
@@ -458,6 +501,7 @@ export function calculateHeatmapGrid(
   structures: { position: [number, number, number]; size: [number, number, number]; castShadow: boolean }[],
   resolution: number = 1,
   bounds: HeatmapBounds = DEFAULT_HEATMAP_BOUNDS,
+  location: SunLocation = DEFAULT_LOCATION,
 ): HeatmapGrid {
   const { minX, maxX, minZ, maxZ } = bounds;
 
@@ -479,7 +523,7 @@ export function calculateHeatmapGrid(
   const TIME_STEP = 0.5; // 30-min steps for heatmap (faster than probe's 15-min)
   const sunSteps: { sun: SunPosition; sinAlt: number }[] = [];
   for (let h = 4; h <= 22; h += TIME_STEP) {
-    const sun = getSunPosition(dayOfYear, h, yardHeadingDeg);
+    const sun = getSunPosition(dayOfYear, h, yardHeadingDeg, location);
     if (sun.isAboveHorizon) {
       sunSteps.push({
         sun,

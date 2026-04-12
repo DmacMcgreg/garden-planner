@@ -8,27 +8,27 @@ import {
   degreesToCompass,
   type Season,
   type SunPosition,
+  type SunLocation,
   type HeatmapGrid,
   type HeatmapMode,
   type HeatmapInstance,
 } from './sun'
-import type { LayoutConfig, BedConfig, PathConfig, PanelConfig } from './layouts'
 import { PLANT_PRESETS } from './types'
-import type { Structure, MeasurementUnit } from './types'
+import type { BedConfig, Structure, MeasurementUnit } from './types'
 
 const DEG2RAD = Math.PI / 180
 
-// Visual sun sphere + sun-arc sit on an imaginary dome of this radius (ft).
-// The actual directional light source is at sun.ts distance=120 for accurate
-// shadow angles; this is purely a viewing aid.
-const SUN_VIZ_RADIUS = 32
+// Visual sun sphere + sun-arc sit on an imaginary dome of user-configurable
+// radius (ft) — controlled via the sunVizRadius prop. The actual directional
+// light source is at sun.ts distance=120 for accurate shadow angles; this is
+// purely a viewing aid.
 
 interface SceneProps {
-  layout: LayoutConfig
   season: Season
   dayOfYear: number
   hour: number
   yardHeadingDeg: number
+  sunLocation: SunLocation
   structures: Structure[]
   selectedId: string | null
   beds: BedConfig[]
@@ -50,6 +50,8 @@ interface SceneProps {
   onSelectHeatmap: (id: string | null) => void
   onUpdateHeatmap: (id: string, patch: Partial<HeatmapInstance>) => void
   gardenItemsOpacity: number
+  sunVizRadius: number
+  resetViewNonce: number
   showGrid: boolean
   gridSpacing: number
   gridCenterX: number
@@ -79,11 +81,11 @@ export default function GardenScene(props: SceneProps) {
 }
 
 function SceneContent({
-  layout,
   season,
   dayOfYear,
   hour,
   yardHeadingDeg,
+  sunLocation,
   structures,
   selectedId,
   beds,
@@ -105,6 +107,8 @@ function SceneContent({
   onSelectHeatmap,
   onUpdateHeatmap,
   gardenItemsOpacity,
+  sunVizRadius,
+  resetViewNonce,
   showGrid,
   gridSpacing,
   gridCenterX,
@@ -125,25 +129,35 @@ function SceneContent({
     }
   })
 
+  // Reset camera to default framing when parent increments the nonce.
+  const firstResetRun = useRef(true)
+  useEffect(() => {
+    if (firstResetRun.current) {
+      firstResetRun.current = false
+      return
+    }
+    controlsRef.current?.reset()
+  }, [resetViewNonce])
+
   // F2: Sun with dynamic heading
   const sun = useMemo(
-    () => getSunPosition(dayOfYear, hour, yardHeadingDeg),
-    [dayOfYear, hour, yardHeadingDeg],
+    () => getSunPosition(dayOfYear, hour, yardHeadingDeg, sunLocation),
+    [dayOfYear, hour, yardHeadingDeg, sunLocation],
   )
 
   const sunPathPoints = useMemo(() => {
     const doy = dayOfYear
     const pts: [number, number, number][] = []
     for (let h = 4; h <= 22; h += 0.25) {
-      const s = getSunPosition(doy, h, yardHeadingDeg)
+      const s = getSunPosition(doy, h, yardHeadingDeg, sunLocation)
       if (s.altitudeDeg > 0) {
         const norm = Math.sqrt(s.sceneX * s.sceneX + s.sceneY * s.sceneY + s.sceneZ * s.sceneZ) || 1
-        const k = SUN_VIZ_RADIUS / norm
+        const k = sunVizRadius / norm
         pts.push([s.sceneX * k, s.sceneY * k, s.sceneZ * k])
       }
     }
     return pts
-  }, [season, yardHeadingDeg])
+  }, [season, yardHeadingDeg, sunVizRadius, sunLocation, dayOfYear])
 
   const skyColor = sun.isAboveHorizon ? '#b3d9f2' : '#111827'
 
@@ -326,21 +340,10 @@ function SceneContent({
           opacity={gardenItemsOpacity}
         />
       )}
-      {layout.paths.map((path, i) => (
-        <WalkingPath key={`p${i}`} path={path} opacity={gardenItemsOpacity} />
-      ))}
-      {layout.panels.map((panel, i) => (
-        <SolarPanel key={`sp${i}`} panel={panel} opacity={gardenItemsOpacity} />
-      ))}
 
       {/* ---- Measurement labels ---- */}
       {showMeasurements && (
-        <MeasurementLabels
-          beds={beds}
-          paths={layout.paths}
-          panels={layout.panels}
-          unit={measurementUnit}
-        />
+        <MeasurementLabels beds={beds} unit={measurementUnit} />
       )}
 
       {/* ---- Sun probe marker ---- */}
@@ -349,7 +352,7 @@ function SceneContent({
       )}
 
       {/* ---- Sun visualization ---- */}
-      {sun.isAboveHorizon && <SunSphere sun={sun} />}
+      {sun.isAboveHorizon && <SunSphere sun={sun} sunVizRadius={sunVizRadius} />}
       {sunPathPoints.length > 2 && (
         <Line points={sunPathPoints} color="#FFA000" lineWidth={1.5} />
       )}
@@ -716,13 +719,9 @@ function SelectedBedGizmo({
 
 function MeasurementLabels({
   beds,
-  paths,
-  panels,
   unit,
 }: {
   beds: BedConfig[]
-  paths: PathConfig[]
-  panels: PanelConfig[]
   unit: MeasurementUnit
 }) {
   const fmt = (ft: number) => {
@@ -762,30 +761,6 @@ function MeasurementLabels({
           </Html>
         )
       })}
-      {paths.map((path, i) => (
-        <Html
-          key={`mp-${i}`}
-          position={[path.x, 0.02, path.z + path.depth / 2 + 0.4]}
-          center
-          style={{ pointerEvents: 'none' }}
-        >
-          <div style={labelStyle}>
-            {fmt(path.width)} x {fmt(path.depth)}
-          </div>
-        </Html>
-      ))}
-      {panels.map((panel, i) => (
-        <Html
-          key={`msp-${i}`}
-          position={[panel.x, 0.1, panel.z + panel.widthFt / 2 + 0.4]}
-          center
-          style={{ pointerEvents: 'none' }}
-        >
-          <div style={labelStyle}>
-            {fmt(panel.widthFt)} x {fmt(panel.heightFt)}
-          </div>
-        </Html>
-      ))}
     </>
   )
 }
@@ -1007,72 +982,19 @@ function Trellis({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Walking path                                                      */
-/* ------------------------------------------------------------------ */
-
-function WalkingPath({ path, opacity }: { path: PathConfig; opacity: number }) {
-  const faded = opacity < 1
-  return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[path.x, 0.015, path.z]}
-      receiveShadow
-    >
-      <planeGeometry args={[path.width, path.depth]} />
-      <meshStandardMaterial key={faded ? 't' : 'o'} color="#c4a882" transparent={faded} opacity={opacity} depthWrite={!faded} />
-    </mesh>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Solar panel                                                       */
-/* ------------------------------------------------------------------ */
-
-function SolarPanel({ panel, opacity }: { panel: PanelConfig; opacity: number }) {
-  const tiltRad = panel.tiltDeg * DEG2RAD
-  const faded = opacity < 1
-  const matKey = faded ? 't' : 'o'
-
-  return (
-    <group position={[panel.x, 0, panel.z]}>
-      <group rotation={[0, 0, -tiltRad]}>
-        <mesh position={[0, panel.heightFt / 2, 0]}>
-          <boxGeometry
-            args={[0.1, panel.heightFt + 0.08, panel.widthFt + 0.08]}
-          />
-          <meshStandardMaterial key={matKey + 'f'} color="#37474f" transparent={faded} opacity={opacity} depthWrite={!faded} />
-        </mesh>
-        <mesh position={[0, panel.heightFt / 2, 0]} castShadow={!faded} receiveShadow>
-          <boxGeometry args={[0.06, panel.heightFt, panel.widthFt]} />
-          <meshStandardMaterial
-            key={matKey + 'p'}
-            color="#1a237e"
-            metalness={0.8}
-            roughness={0.2}
-            transparent={faded}
-            opacity={opacity}
-            depthWrite={!faded}
-          />
-        </mesh>
-      </group>
-    </group>
-  )
-}
-
-/* ------------------------------------------------------------------ */
 /*  Sun sphere (visual indicator in sky)                              */
 /* ------------------------------------------------------------------ */
 
-function SunSphere({ sun }: { sun: SunPosition }) {
+function SunSphere({ sun, sunVizRadius }: { sun: SunPosition; sunVizRadius: number }) {
   const meshRef = useRef<Mesh>(null)
   const glowRef = useRef<Mesh>(null)
   const { camera } = useThree()
 
-  // Project the light direction onto a fixed dome radius so the sphere is
-  // always visible — decoupled from the far-away light source.
+  // Project the light direction onto the configured dome radius so the sphere
+  // is always visible — decoupled from the far-away light source.
   const norm =
     Math.sqrt(sun.sceneX * sun.sceneX + sun.sceneY * sun.sceneY + sun.sceneZ * sun.sceneZ) || 1
-  const k = SUN_VIZ_RADIUS / norm
+  const k = sunVizRadius / norm
   const pos: [number, number, number] = [sun.sceneX * k, sun.sceneY * k, sun.sceneZ * k]
 
   // Auto-scale to keep the sphere a roughly constant screen size regardless
@@ -1110,11 +1032,12 @@ function DirectionLabels({ yardHeadingDeg }: { yardHeadingDeg: number }) {
     const minusX = degreesToCompass((yardHeadingDeg + 180) % 360)
     const minusZ = degreesToCompass((yardHeadingDeg + 270) % 360)
     const plusZ = degreesToCompass((yardHeadingDeg + 90) % 360)
+    const color = '#c5e1a5'
     return [
-      { text: `${plusX} - House (3-storey)`, pos: [15, 2, 0] as [number, number, number], color: '#ff8a80' },
-      { text: `${minusX} - Back Fence`, pos: [-14, 2, 0] as [number, number, number], color: '#ffe082' },
-      { text: `${minusZ} - Side Fence`, pos: [0, 2, -7.5] as [number, number, number], color: '#90caf9' },
-      { text: `${plusZ} - Open / Sunniest`, pos: [0, 2, 8] as [number, number, number], color: '#c5e1a5' },
+      { text: plusX, pos: [15, 2, 0] as [number, number, number], color },
+      { text: minusX, pos: [-14, 2, 0] as [number, number, number], color },
+      { text: minusZ, pos: [0, 2, -7.5] as [number, number, number], color },
+      { text: plusZ, pos: [0, 2, 8] as [number, number, number], color },
     ]
   }, [yardHeadingDeg])
 

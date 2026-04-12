@@ -5,7 +5,6 @@ import BedPanel from './BedPanel'
 import ConfigPanel from './ConfigPanel'
 import NavSidebar from './NavSidebar'
 import AlertPanel from './AlertPanel'
-import { layouts, plantLegend } from './layouts'
 import type { BedConfig, BedAlert, GardenConfig } from './types'
 import {
   getSunPosition,
@@ -24,12 +23,32 @@ import {
   currentHour,
   type Season,
   type SunExposureResult,
+  type SunLocation,
   type HeatmapMode,
   type HeatmapGrid,
   type HeatmapInstance,
 } from './sun'
 import {
-  DEFAULT_STRUCTURES,
+  DEFAULT_CITY_KEY,
+  cityKey,
+  findCityByKey,
+  getTzOffsetHours,
+  type CityRecord,
+} from './cities'
+import { CityPicker } from './CityPicker'
+import {
+  SectionHeader,
+  IconCalendar,
+  IconClock,
+  IconSun,
+  IconSunRays,
+  IconHeatGrid,
+  IconCompassArrow,
+  IconCompassRose,
+  IconMapPin,
+  IconRuler,
+} from './SectionHeader'
+import {
   PLANT_PRESETS,
   getMinSunHoursForBed,
   loadDefaultConfig,
@@ -75,12 +94,11 @@ const _initialHeatmaps: HeatmapInstance[] = _defaultConfig
   ? migrateHeatmapsFromConfig(_defaultConfig)
   : []
 
-let nextStructureId = maxCustomId(_defaultConfig?.structures ?? DEFAULT_STRUCTURES, 'custom-') + 1
+let nextStructureId = maxCustomId(_defaultConfig?.structures ?? [], 'custom-') + 1
 let nextBedId = maxCustomId(_defaultConfig?.beds ?? [], 'custom-bed-') + 1
 let nextHeatmapId = maxCustomId(_initialHeatmaps, 'heatmap-') + 1
 
 export default function App() {
-  const [layoutIdx, setLayoutIdx] = useState(_defaultConfig?.layoutIdx ?? 0)
   const [dayOfYear, setDayOfYear] = useState(
     _defaultConfig?.dayOfYear ?? getDayOfYear((_defaultConfig?.season as Season) ?? 'summer'),
   )
@@ -90,17 +108,34 @@ export default function App() {
   // F2: Garden orientation
   const [yardHeadingDeg, setYardHeadingDeg] = useState(_defaultConfig?.yardHeadingDeg ?? DEFAULT_YARD_HEADING)
 
+  // F2b: Geographic location — drives latitude/longitude/tz for sun math
+  const [city, setCity] = useState<CityRecord>(() => {
+    const fromKey = findCityByKey(_defaultConfig?.cityKey ?? '')
+    if (fromKey) return fromKey
+    if (_defaultConfig?.latitude != null) {
+      return {
+        name: 'Custom',
+        admin: '',
+        country: '',
+        lat: _defaultConfig.latitude,
+        lon: _defaultConfig.longitude ?? 0,
+        tz: _defaultConfig.cityTz ?? 'UTC',
+      }
+    }
+    return findCityByKey(DEFAULT_CITY_KEY)!
+  })
+
   // F1: Compass mode
   const [compassMode, setCompassMode] = useState<CompassMode>('locked')
   const [cameraAzimuth, setCameraAzimuth] = useState(0)
 
   // F3: Structures
-  const [structures, setStructures] = useState<Structure[]>(_defaultConfig?.structures ?? DEFAULT_STRUCTURES)
+  const [structures, setStructures] = useState<Structure[]>(_defaultConfig?.structures ?? [])
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // Garden beds (mutable, cloned from layout presets or default config)
+  // Garden beds (user-defined; loaded from saved config or empty)
   const [beds, setBeds] = useState<BedConfig[]>(() =>
-    migrateBeds(_defaultConfig?.beds ?? structuredClone(layouts[0].beds)),
+    migrateBeds(_defaultConfig?.beds ?? []),
   )
   const [selectedBedId, setSelectedBedId] = useState<string | null>(null)
 
@@ -116,6 +151,8 @@ export default function App() {
   const [heatmaps, setHeatmaps] = useState<HeatmapInstance[]>(_initialHeatmaps)
   const [selectedHeatmapId, setSelectedHeatmapId] = useState<string | null>(null)
   const [gardenItemsOpacity, setGardenItemsOpacity] = useState(_defaultConfig?.gardenItemsOpacity ?? 1)
+  const [sunVizRadius, setSunVizRadius] = useState(_defaultConfig?.sunVizRadius ?? 32)
+  const [resetViewNonce, setResetViewNonce] = useState(0)
 
   // Measurement grid
   const _defaultGridWidth = 60
@@ -126,8 +163,6 @@ export default function App() {
   const [gridCenterZ, setGridCenterZ] = useState(_defaultConfig?.gridCenterZ ?? 0)
   const [gridWidth, setGridWidth] = useState(_defaultConfig?.gridWidth ?? _defaultGridWidth)
   const [gridDepth, setGridDepth] = useState(_defaultConfig?.gridDepth ?? _defaultGridDepth)
-
-  const layout = layouts[layoutIdx]
 
   // Mutual exclusion: selecting one item deselects the others
   const selectBed = useCallback((id: string | null) => {
@@ -162,9 +197,22 @@ export default function App() {
     }
   }, [])
 
+  const sunLocation = useMemo<SunLocation>(() => {
+    // Build a Date for the current dayOfYear in the current year so that
+    // getTzOffsetHours resolves DST at the right calendar moment.
+    const year = new Date().getFullYear()
+    const date = new Date(Date.UTC(year, 0, 1, 12, 0, 0))
+    date.setUTCDate(dayOfYear)
+    return {
+      latitude: city.lat,
+      longitude: city.lon,
+      tzOffsetHours: getTzOffsetHours(city.tz, date),
+    }
+  }, [city, dayOfYear])
+
   const sun = useMemo(
-    () => getSunPosition(dayOfYear, hour, yardHeadingDeg),
-    [dayOfYear, hour, yardHeadingDeg],
+    () => getSunPosition(dayOfYear, hour, yardHeadingDeg, sunLocation),
+    [dayOfYear, hour, yardHeadingDeg, sunLocation],
   )
 
   const sunExposure = useMemo<SunExposureResult | null>(() => {
@@ -175,8 +223,9 @@ export default function App() {
       dayOfYear,
       yardHeadingDeg,
       structures,
+      sunLocation,
     )
-  }, [sunProbePosition, dayOfYear, yardHeadingDeg, structures])
+  }, [sunProbePosition, dayOfYear, yardHeadingDeg, structures, sunLocation])
 
   const handleSunProbePlace = useCallback((x: number, z: number) => {
     setSunProbePosition({ x, z })
@@ -192,16 +241,17 @@ export default function App() {
         structures,
         1,
         heatmapInstanceBounds(h),
+        sunLocation,
       )
     }
     return out
-  }, [heatmaps, dayOfYear, yardHeadingDeg, structures])
+  }, [heatmaps, dayOfYear, yardHeadingDeg, structures, sunLocation])
 
   const bedAlerts = useMemo<BedAlert[]>(() => {
     const alerts: BedAlert[] = []
     for (const bed of beds) {
       const minSunHours = getMinSunHoursForBed(bed)
-      const exposure = calculateSunExposure(bed.x, bed.z, dayOfYear, yardHeadingDeg, structures)
+      const exposure = calculateSunExposure(bed.x, bed.z, dayOfYear, yardHeadingDeg, structures, sunLocation)
       if (exposure.peakSunHours < minSunHours) {
         const deficit = minSunHours - exposure.peakSunHours
         alerts.push({
@@ -225,7 +275,7 @@ export default function App() {
       }
     }
     return alerts
-  }, [beds, dayOfYear, yardHeadingDeg, structures])
+  }, [beds, dayOfYear, yardHeadingDeg, structures, sunLocation])
 
   // Dismissed alerts: keyed by "bedId:alertType", auto-cleared on bed move
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
@@ -339,7 +389,7 @@ export default function App() {
   )
 
   const handleResetStructures = useCallback(() => {
-    setStructures(DEFAULT_STRUCTURES)
+    setStructures([])
     setSelectedId(null)
   }, [])
 
@@ -396,15 +446,14 @@ export default function App() {
   )
 
   const handleResetBeds = useCallback(() => {
-    setBeds(migrateBeds(structuredClone(layouts[layoutIdx].beds)))
+    setBeds([])
     setSelectedBedId(null)
-  }, [layoutIdx])
+  }, [])
 
   const getCurrentConfig = useCallback(
     (name: string): GardenConfig => ({
       name,
       savedAt: new Date().toISOString(),
-      layoutIdx,
       season,
       dayOfYear,
       hour,
@@ -414,6 +463,11 @@ export default function App() {
       showMeasurements,
       measurementUnit,
       gardenItemsOpacity,
+      sunVizRadius,
+      cityKey: cityKey(city),
+      latitude: city.lat,
+      longitude: city.lon,
+      cityTz: city.tz,
       showGrid,
       gridSpacing,
       gridCenterX,
@@ -423,9 +477,9 @@ export default function App() {
       heatmaps,
     }),
     [
-      layoutIdx, season, dayOfYear, hour, yardHeadingDeg, structures, beds,
+      season, dayOfYear, hour, yardHeadingDeg, structures, beds,
       showMeasurements, measurementUnit,
-      gardenItemsOpacity, showGrid, gridSpacing,
+      gardenItemsOpacity, sunVizRadius, city, showGrid, gridSpacing,
       gridCenterX, gridCenterZ, gridWidth, gridDepth,
       heatmaps,
     ],
@@ -446,15 +500,28 @@ export default function App() {
   }, [getCurrentConfig])
 
   const handleLoadConfig = useCallback((config: GardenConfig) => {
-    setLayoutIdx(config.layoutIdx)
     setDayOfYear(config.dayOfYear ?? getDayOfYear(config.season as Season))
     setHour(config.hour)
     setYardHeadingDeg(config.yardHeadingDeg)
+    const restoredCity =
+      findCityByKey(config.cityKey ?? '') ??
+      (config.latitude != null
+        ? {
+            name: 'Custom',
+            admin: '',
+            country: '',
+            lat: config.latitude,
+            lon: config.longitude ?? 0,
+            tz: config.cityTz ?? 'UTC',
+          }
+        : findCityByKey(DEFAULT_CITY_KEY)!)
+    setCity(restoredCity)
     setStructures(config.structures)
     setBeds(migrateBeds(config.beds))
     setShowMeasurements(config.showMeasurements)
     setMeasurementUnit(config.measurementUnit as MeasurementUnit)
     setGardenItemsOpacity(config.gardenItemsOpacity)
+    setSunVizRadius(config.sunVizRadius ?? 32)
     setShowGrid(config.showGrid ?? false)
     setGridSpacing(config.gridSpacing ?? 1)
     setGridCenterX(config.gridCenterX ?? 0)
@@ -490,7 +557,9 @@ export default function App() {
             Backyard Garden Planner
           </h1>
           <p className="text-xs text-gray-400 mt-0.5">
-            24 x 10 ft &middot; Ontario ~43.7&deg;N
+            24 x 10 ft &middot; {city.name}
+            {city.country ? `, ${city.country}` : ''} &middot; {Math.abs(city.lat).toFixed(1)}&deg;
+            {city.lat >= 0 ? 'N' : 'S'}
           </p>
         </div>
 
@@ -506,56 +575,23 @@ export default function App() {
 
         <hr className="border-gray-700 mx-4" />
 
-        {/* Layout selector */}
-        <section id="section-layout" className="px-4 py-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Layout
-          </h2>
-          <div className="space-y-1.5">
-            {layouts.map((l, i) => (
-              <button
-                key={l.id}
-                onClick={() => {
-                  setLayoutIdx(i)
-                  setBeds(migrateBeds(structuredClone(layouts[i].beds)))
-                  setSelectedBedId(null)
-                }}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                  i === layoutIdx
-                    ? 'bg-green-700/60 border border-green-500/60'
-                    : 'bg-gray-800 border border-gray-700 hover:border-gray-500'
-                }`}
-              >
-                <span className="font-semibold">{l.name}</span>
-                <span className="block text-xs text-gray-400 mt-0.5">
-                  {l.subtitle}
-                </span>
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-            {layout.description}
-          </p>
-        </section>
-
-        <hr className="border-gray-700 mx-4" />
-
         {/* Season / Date */}
         <section id="section-season" className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Date
-            </h2>
-            <button
-              onClick={() => {
-                setDayOfYear(todayDayOfYear())
-                setHour(Math.min(21, Math.max(5, Math.round(currentHour() * 4) / 4)))
-              }}
-              className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-300 font-medium transition-colors"
-            >
-              Today
-            </button>
-          </div>
+          <SectionHeader
+            icon={<IconCalendar />}
+            title="Date"
+            right={
+              <button
+                onClick={() => {
+                  setDayOfYear(todayDayOfYear())
+                  setHour(Math.min(21, Math.max(5, Math.round(currentHour() * 4) / 4)))
+                }}
+                className="px-2 py-0.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-300 font-medium transition-colors"
+              >
+                Today
+              </button>
+            }
+          />
           <input
             type="range"
             min={1}
@@ -594,9 +630,7 @@ export default function App() {
 
         {/* Time of day */}
         <section id="section-time" className="px-4 py-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Time of Day
-          </h2>
+          <SectionHeader icon={<IconClock />} title="Time of Day" />
           <input
             type="range"
             min={5}
@@ -619,52 +653,67 @@ export default function App() {
 
         {/* Sun info */}
         <section id="section-sun-position" className="px-4 py-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Sun Position
-          </h2>
+          <SectionHeader icon={<IconSun />} title="Sun Position" />
           {sun.isAboveHorizon ? (
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="bg-gray-800 rounded px-3 py-2">
-                <div className="text-xs text-gray-500">Altitude</div>
+                <div className="text-xs text-gray-300">Altitude</div>
                 <div className="font-mono font-semibold text-amber-400">
                   {sun.altitudeDeg.toFixed(1)}&deg;
                 </div>
               </div>
               <div className="bg-gray-800 rounded px-3 py-2">
-                <div className="text-xs text-gray-500">Azimuth</div>
+                <div className="text-xs text-gray-300">Azimuth</div>
                 <div className="font-mono font-semibold text-amber-400">
                   {sun.azimuthDeg.toFixed(1)}&deg;
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Sun is below the horizon</p>
+            <p className="text-sm text-gray-400">Sun is below the horizon</p>
           )}
+
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
+              <span>Sun Path Distance</span>
+              <span className="font-mono">{sunVizRadius.toFixed(0)} ft</span>
+            </div>
+            <input
+              type="range"
+              min={20}
+              max={120}
+              step={1}
+              value={sunVizRadius}
+              onChange={(e) => setSunVizRadius(parseFloat(e.target.value))}
+              className="w-full accent-amber-500"
+            />
+          </div>
         </section>
 
         <hr className="border-gray-700 mx-4" />
 
         {/* Sun Exposure Probe */}
         <section id="section-sun-exposure" className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Sun Exposure
-            </h2>
-            <button
-              onClick={() => {
-                const next = !sunProbeActive
-                setSunProbeActive(next)
-                if (!next) setSunProbePosition(null)
-              }}
-              className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${
-                sunProbeActive
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
-              }`}
-            >
-              {sunProbeActive ? 'Probing...' : 'Place Probe'}
-            </button>
-          </div>
+          <SectionHeader
+            icon={<IconSunRays />}
+            title="Sun Exposure"
+            right={
+              <button
+                onClick={() => {
+                  const next = !sunProbeActive
+                  setSunProbeActive(next)
+                  if (!next) setSunProbePosition(null)
+                }}
+                className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-colors ${
+                  sunProbeActive
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:text-white border border-gray-700'
+                }`}
+              >
+                {sunProbeActive ? 'Probing...' : 'Place Probe'}
+              </button>
+            }
+          />
 
           {sunProbeActive && !sunProbePosition && (
             <p className="text-xs text-amber-400/80">
@@ -689,22 +738,23 @@ export default function App() {
 
         {/* Sun Heatmaps */}
         <section id="section-heatmap" className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Sun Heatmaps
-            </h2>
-            <button
-              onClick={handleAddHeatmap}
-              className="text-[10px] px-2 py-0.5 rounded bg-amber-700/70 hover:bg-amber-600 text-white font-medium transition-colors"
-              title="Add new heatmap"
-            >
-              + Add
-            </button>
-          </div>
+          <SectionHeader
+            icon={<IconHeatGrid />}
+            title="Sun Heatmaps"
+            right={
+              <button
+                onClick={handleAddHeatmap}
+                className="text-[10px] px-2 py-0.5 rounded bg-amber-700/70 hover:bg-amber-600 text-white font-medium transition-colors"
+                title="Add new heatmap"
+              >
+                + Add
+              </button>
+            }
+          />
 
           {/* Garden items opacity (global) */}
           <div className="mb-2">
-            <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+            <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
               <span>Garden Items Opacity</span>
               <span className="font-mono">{Math.round(gardenItemsOpacity * 100)}%</span>
             </div>
@@ -720,7 +770,7 @@ export default function App() {
           </div>
 
           {heatmaps.length === 0 && (
-            <div className="text-[10px] text-gray-500 italic py-2">
+            <div className="text-[10px] text-gray-400 italic py-2">
               No heatmaps. Click + Add to create one.
             </div>
           )}
@@ -797,7 +847,7 @@ export default function App() {
 
                     {/* Opacity */}
                     <div>
-                      <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+                      <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
                         <span>Opacity</span>
                         <span className="font-mono">{Math.round(h.opacity * 100)}%</span>
                       </div>
@@ -819,7 +869,7 @@ export default function App() {
                     {/* Area */}
                     <div className="grid grid-cols-2 gap-1.5">
                       <label className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                           cX
                         </span>
                         <input
@@ -835,7 +885,7 @@ export default function App() {
                         />
                       </label>
                       <label className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                           cZ
                         </span>
                         <input
@@ -853,7 +903,7 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
                       <label className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                           W
                         </span>
                         <input
@@ -870,7 +920,7 @@ export default function App() {
                         />
                       </label>
                       <label className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                           D
                         </span>
                         <input
@@ -898,11 +948,25 @@ export default function App() {
 
         <hr className="border-gray-700 mx-4" />
 
+        {/* F2a: Location */}
+        <section id="section-location" className="px-4 py-3">
+          <SectionHeader icon={<IconMapPin />} title="Location" />
+          <CityPicker value={city} onChange={setCity} />
+          <div className="mt-1.5 text-[10px] text-gray-500 font-mono">
+            {Math.abs(city.lat).toFixed(2)}&deg;{city.lat >= 0 ? 'N' : 'S'},{' '}
+            {Math.abs(city.lon).toFixed(2)}&deg;{city.lon >= 0 ? 'E' : 'W'}
+            {city.tz ? ` · ${city.tz}` : ''}
+            {' · UTC'}
+            {sunLocation.tzOffsetHours >= 0 ? '+' : ''}
+            {sunLocation.tzOffsetHours}
+          </div>
+        </section>
+
+        <hr className="border-gray-700 mx-4" />
+
         {/* F2: Garden Orientation */}
         <section id="section-orientation" className="px-4 py-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Garden Orientation
-          </h2>
+          <SectionHeader icon={<IconCompassArrow />} title="Garden Orientation" />
           <input
             type="range"
             min={0}
@@ -923,7 +987,7 @@ export default function App() {
           {yardHeadingDeg !== DEFAULT_YARD_HEADING && (
             <button
               onClick={() => setYardHeadingDeg(DEFAULT_YARD_HEADING)}
-              className="mt-1.5 text-[10px] text-gray-500 hover:text-white transition-colors"
+              className="mt-1.5 text-[10px] text-gray-400 hover:text-white transition-colors"
             >
               Reset to {DEFAULT_YARD_HEADING}&deg; (
               {degreesToCompass(DEFAULT_YARD_HEADING)})
@@ -935,32 +999,35 @@ export default function App() {
 
         {/* F1: Compass with mode toggle */}
         <section id="section-compass" className="px-4 py-3 flex flex-col items-center">
-          <div className="flex items-center justify-between w-full mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Compass
-            </h2>
-            <div className="flex bg-gray-800 rounded overflow-hidden border border-gray-700">
-              <button
-                onClick={() => setCompassMode('locked')}
-                className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                  compassMode === 'locked'
-                    ? 'bg-emerald-700 text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                N-Up
-              </button>
-              <button
-                onClick={() => setCompassMode('camera-following')}
-                className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                  compassMode === 'camera-following'
-                    ? 'bg-emerald-700 text-white'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                Camera
-              </button>
-            </div>
+          <div className="w-full">
+            <SectionHeader
+              icon={<IconCompassRose />}
+              title="Compass"
+              right={
+                <div className="flex bg-gray-800 rounded overflow-hidden border border-gray-700">
+                  <button
+                    onClick={() => setCompassMode('locked')}
+                    className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                      compassMode === 'locked'
+                        ? 'bg-emerald-700 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    N-Up
+                  </button>
+                  <button
+                    onClick={() => setCompassMode('camera-following')}
+                    className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                      compassMode === 'camera-following'
+                        ? 'bg-emerald-700 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Camera
+                  </button>
+                </div>
+              }
+            />
           </div>
           <CompassRose
             sunAzimuth={sun.isAboveHorizon ? sun.azimuthDeg : -1}
@@ -971,26 +1038,34 @@ export default function App() {
           <span className="text-[10px] text-gray-500 mt-1">
             {compassMode === 'locked' ? 'N-Up (fixed)' : 'Camera View'}
           </span>
+          <button
+            onClick={() => setResetViewNonce((n) => n + 1)}
+            className="mt-3 px-2 py-0.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-300 font-medium transition-colors"
+          >
+            Reset View
+          </button>
+          <span className="text-[10px] text-gray-500 mt-1">Right-click drag to pan</span>
         </section>
 
         <hr className="border-gray-700 mx-4" />
 
         {/* Measurements toggle */}
         <section id="section-measurements" className="px-4 py-3">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Measurements
-            </h2>
-            <label className="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showMeasurements}
-                onChange={(e) => setShowMeasurements(e.target.checked)}
-                className="accent-cyan-500"
-              />
-              Labels
-            </label>
-          </div>
+          <SectionHeader
+            icon={<IconRuler />}
+            title="Measurements"
+            right={
+              <label className="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showMeasurements}
+                  onChange={(e) => setShowMeasurements(e.target.checked)}
+                  className="accent-cyan-500"
+                />
+                Labels
+              </label>
+            }
+          />
           {showMeasurements && (
             <div className="flex bg-gray-800 rounded overflow-hidden border border-gray-700 mb-2">
               <button
@@ -1018,8 +1093,8 @@ export default function App() {
 
           {/* Grid overlay */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-700/60">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Ground Grid</span>
-            <label className="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer">
+            <span className="text-[10px] text-gray-300 uppercase tracking-wider">Ground Grid</span>
+            <label className="flex items-center gap-1.5 text-[10px] text-gray-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={showGrid}
@@ -1031,7 +1106,7 @@ export default function App() {
           </div>
           {showGrid && (
             <div className="mt-2">
-              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+              <div className="flex items-center justify-between text-[10px] text-gray-300 mb-0.5">
                 <span>Cell Size</span>
                 <span className="font-mono">
                   {gridSpacing < 1
@@ -1054,14 +1129,14 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <p className="text-[9px] text-gray-600 mt-1 leading-tight">
+              <p className="text-[9px] text-gray-400 mt-1 leading-tight">
                 Major lines every {(gridSpacing * 5).toFixed(gridSpacing * 5 % 1 === 0 ? 0 : 1)} ft
               </p>
 
               {/* Grid center + size */}
               <div className="mt-2 pt-2 border-t border-gray-700/60">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">Area</span>
+                  <span className="text-[10px] text-gray-300 uppercase tracking-wider">Area</span>
                   <button
                     onClick={() => {
                       setGridCenterX(0)
@@ -1069,7 +1144,7 @@ export default function App() {
                       setGridWidth(_defaultGridWidth)
                       setGridDepth(_defaultGridDepth)
                     }}
-                    className="text-[9px] text-gray-500 hover:text-white transition-colors"
+                    className="text-[9px] text-gray-400 hover:text-white transition-colors"
                     title="Reset grid to default center and size"
                   >
                     Reset
@@ -1077,7 +1152,7 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 mb-1.5">
                   <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                       cX
                     </span>
                     <input
@@ -1089,7 +1164,7 @@ export default function App() {
                     />
                   </label>
                   <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                       cZ
                     </span>
                     <input
@@ -1103,7 +1178,7 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                       W
                     </span>
                     <input
@@ -1119,7 +1194,7 @@ export default function App() {
                     />
                   </label>
                   <label className="relative">
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-500">
+                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-300">
                       D
                     </span>
                     <input
@@ -1178,29 +1253,6 @@ export default function App() {
 
         <hr className="border-gray-700 mx-4" />
 
-        {/* Plant legend */}
-        <section id="section-legend" className="px-4 py-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Plant Legend
-          </h2>
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {plantLegend.map((p) => (
-              <div key={p.name} className="flex items-center gap-2 text-xs">
-                <span
-                  className="w-3 h-3 rounded-sm flex-shrink-0"
-                  style={{ background: p.color }}
-                />
-                <span className="font-medium">{p.name}</span>
-                <span className="text-gray-500 ml-auto text-[10px]">
-                  {p.sun}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <hr className="border-gray-700 mx-4" />
-
         {/* F3: Structures panel */}
         <div id="section-structures">
         <StructurePanel
@@ -1221,11 +1273,11 @@ export default function App() {
       {/* ---- 3D Scene ---- */}
       <main className="flex-1 relative">
         <GardenScene
-          layout={layout}
           season={season}
           dayOfYear={dayOfYear}
           hour={hour}
           yardHeadingDeg={yardHeadingDeg}
+          sunLocation={sunLocation}
           structures={structures}
           selectedId={selectedId}
           beds={beds}
@@ -1247,6 +1299,8 @@ export default function App() {
           onSelectHeatmap={selectHeatmap}
           onUpdateHeatmap={handleUpdateHeatmap}
           gardenItemsOpacity={gardenItemsOpacity}
+          sunVizRadius={sunVizRadius}
+          resetViewNonce={resetViewNonce}
           showGrid={showGrid}
           gridSpacing={gridSpacing}
           gridCenterX={gridCenterX}
@@ -1266,8 +1320,8 @@ export default function App() {
               : '(below horizon)'}
           </div>
           <div className="text-xs text-gray-300 mt-0.5">
-            {layout.name} &middot; Heading:{' '}
-            {degreesToCompass(yardHeadingDeg)} ({yardHeadingDeg.toFixed(0)}&deg;)
+            Heading: {degreesToCompass(yardHeadingDeg)} (
+            {yardHeadingDeg.toFixed(0)}&deg;)
           </div>
         </div>
 

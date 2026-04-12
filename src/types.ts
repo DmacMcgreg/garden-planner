@@ -1,6 +1,5 @@
 import type { HeatmapInstance } from './sun'
 
-// Garden bed interfaces (moved from layouts.ts)
 export interface BedConfig {
   id: string
   name: string
@@ -21,32 +20,6 @@ export interface BedAlert {
   type: 'sun-exposure' | 'spacing'
   severity: 'warning' | 'error'
   message: string
-}
-
-export interface PanelConfig {
-  x: number
-  z: number
-  tiltDeg: number
-  facingAngle: number
-  widthFt: number
-  heightFt: number
-}
-
-export interface PathConfig {
-  x: number
-  z: number
-  width: number
-  depth: number
-}
-
-export interface LayoutConfig {
-  id: string
-  name: string
-  subtitle: string
-  description: string
-  beds: BedConfig[]
-  panels: PanelConfig[]
-  paths: PathConfig[]
 }
 
 // Plant types and presets for adding new beds
@@ -210,7 +183,6 @@ export interface Structure {
 export interface GardenConfig {
   name: string
   savedAt: string
-  layoutIdx: number
   season: string
   dayOfYear: number
   hour: number
@@ -220,6 +192,11 @@ export interface GardenConfig {
   showMeasurements: boolean
   measurementUnit: MeasurementUnit
   gardenItemsOpacity: number
+  sunVizRadius?: number
+  cityKey?: string
+  latitude?: number
+  longitude?: number
+  cityTz?: string
   showGrid?: boolean
   gridSpacing?: number
   gridCenterX?: number
@@ -314,45 +291,3 @@ export function parseConfigFromJson(json: string): GardenConfig | null {
   }
 }
 
-export const DEFAULT_STRUCTURES: Structure[] = [
-  {
-    id: 'house',
-    type: 'building',
-    name: 'House',
-    position: [18, 15, 0],
-    size: [12, 30, 22],
-    color: '#78716c',
-    castShadow: true,
-    receiveShadow: true,
-  },
-  {
-    id: 'back-fence',
-    type: 'fence',
-    name: 'Back Fence',
-    position: [-12, 3, 0],
-    size: [0.15, 6, 10.3],
-    color: '#a0845c',
-    castShadow: true,
-    receiveShadow: true,
-  },
-  {
-    id: 'side-fence',
-    type: 'fence',
-    name: 'Side Fence',
-    position: [0, 3, -5],
-    size: [24.3, 6, 0.15],
-    color: '#a0845c',
-    castShadow: true,
-    receiveShadow: true,
-  },
-  {
-    id: 'neighbor',
-    type: 'building',
-    name: 'Neighbor Building',
-    position: [0, 12, -15],
-    size: [26, 24, 14],
-    color: '#6b6460',
-    castShadow: true,
-    receiveShadow: false,
-  },
-]
