@@ -15,6 +15,32 @@ export interface BedConfig {
   trellisHeight?: number
 }
 
+export interface PanelConfig {
+  x: number
+  z: number
+  tiltDeg: number
+  facingAngle: number
+  widthFt: number
+  heightFt: number
+}
+
+export interface PathConfig {
+  x: number
+  z: number
+  width: number
+  depth: number
+}
+
+export interface LayoutConfig {
+  id: string
+  name: string
+  subtitle: string
+  description: string
+  beds: BedConfig[]
+  panels: PanelConfig[]
+  paths: PathConfig[]
+}
+
 export interface BedAlert {
   bedId: string
   type: 'sun-exposure' | 'spacing'
@@ -125,9 +151,10 @@ const presetByName = new Map(
 
 export function migrateBeds(beds: BedConfig[]): BedConfig[] {
   return beds.map((b) => {
-    if (b.plantType) return b
-    const match = presetByName.get(b.name.toLowerCase())
-    return match ? { ...b, plantType: match } : b
+    if (b.plantType && Object.prototype.hasOwnProperty.call(PLANT_PRESETS, b.plantType)) return b
+    const name = b.name.trim().toLowerCase().replace(/ \d+$/, '')
+    const match = presetByName.get(name) ?? (name === 'herbs' ? 'herbs' : undefined)
+    return match || b.plantType ? { ...b, plantType: match } : b
   })
 }
 
@@ -167,7 +194,7 @@ export function getMinSunHoursForBed(bed: BedConfig): number {
 export type MeasurementUnit = 'ft' | 'm'
 
 // Structure types
-export type StructureType = 'building' | 'fence'
+export type StructureType = 'building' | 'fence' | 'tree'
 
 export interface Structure {
   id: string
@@ -181,6 +208,12 @@ export interface Structure {
 }
 
 export interface GardenConfig {
+  layoutIdx?: number
+  yardGuides?: boolean
+  yard?: import('./garden').YardSize
+  yardPhoto?: import('./YardPhoto').YardPhoto
+  landscape?: boolean
+  showSunPath?: boolean
   name: string
   savedAt: string
   season: string

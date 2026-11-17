@@ -1,0 +1,37 @@
+# You can walk around the planting plan and watch the light change.
+What this is: The planner models a backyard in feet and estimates sunlight at each bed.
+The problem: A fresh launch used to show an empty lawn with the configuration controls open.
+Why now: A new garden opens with four editable beds and a sunlight simulator beside them.
+Words to know first:
+- Backyard garden: The garden opens in 3D orbit. Each planting card opens its bed editor.
+- Sunlight simulator: The curve follows the selected date and location. Its marker drives the light in the scene.
+- Yard and photo: Compare the original backyard photo with the live render and calibrate its dimensions.
+
+Open the local planner · Watch OpenAI’s garden demo
+
+## The opening view
+
+The same Toronto yard now opens with cedar planters, a gravel path, a boundary tree and a crop directory.
+
+[Picture] Backyard garden: Toronto starter garden at 9:30 AM on June 21.
+
+## Inspect a bed
+
+Orbit the garden to inspect the plants, or use the overhead plan to move, resize and rotate a bed.
+
+[Picture] Plan: The planting directory and plan read the same bed positions.
+
+## Follow the sunlight
+
+Play through the day or drag across the curve to see the shadows move over the beds.
+
+[Screen] Sunlight simulator: The curve follows the selected date and location. Its marker drives the light in the scene.
+[Screen] Yard and photo: Compare the original backyard photo with the live render and calibrate its dimensions.
+
+## On a phone
+
+The garden stays above the simulator, and the bed directory follows both.
+
+[Picture] Mobile garden: The garden and simulator share a scrollable page.
+
+Built 2026-11-17 from the bundle "Garden Planner".

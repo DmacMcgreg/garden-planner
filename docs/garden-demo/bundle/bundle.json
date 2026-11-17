@@ -1,0 +1,311 @@
+{
+  "project": "Garden Planner",
+  "home": "pages/index",
+  "statuses": {
+    "works": {
+      "label": "Works",
+      "tone": "good"
+    },
+    "built": {
+      "label": "Built",
+      "tone": "good"
+    },
+    "settled": {
+      "label": "Settled",
+      "tone": "good"
+    },
+    "partly": {
+      "label": "Partly built",
+      "tone": "warn"
+    },
+    "changed": {
+      "label": "Changed",
+      "tone": "warn"
+    },
+    "open": {
+      "label": "Open",
+      "tone": "warn"
+    },
+    "proposed": {
+      "label": "Proposed",
+      "tone": "warn"
+    },
+    "stale": {
+      "label": "Out of date",
+      "tone": "warn"
+    },
+    "broken": {
+      "label": "Broken",
+      "tone": "bad"
+    },
+    "blocked": {
+      "label": "Blocked",
+      "tone": "bad"
+    },
+    "missing": {
+      "label": "Not built",
+      "tone": "bad"
+    },
+    "planned": {
+      "label": "Planned",
+      "tone": "mute"
+    },
+    "kept": {
+      "label": "Kept",
+      "tone": "mute"
+    },
+    "dropped": {
+      "label": "Dropped",
+      "tone": "mute"
+    },
+    "unchecked": {
+      "label": "Not checked",
+      "tone": "mute"
+    },
+    "later": {
+      "label": "Later",
+      "tone": "ghost"
+    },
+    "outside": {
+      "label": "Outside",
+      "tone": "ghost"
+    }
+  },
+  "types": {
+    "flow": {
+      "label": "Map",
+      "plural": "Maps"
+    },
+    "part": {
+      "label": "Part",
+      "plural": "Parts",
+      "mark": "hex",
+      "index": {
+        "view": "table",
+        "sort": "title",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Part"
+          },
+          {
+            "key": "status",
+            "label": "State"
+          },
+          {
+            "key": "description",
+            "label": "What it does"
+          },
+          {
+            "key": "named",
+            "label": "Named in"
+          }
+        ]
+      }
+    },
+    "journey": {
+      "label": "Journey",
+      "plural": "Journeys",
+      "mark": "arrow",
+      "index": {
+        "view": "table",
+        "sort": "title",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Journey"
+          },
+          {
+            "key": "rel:for",
+            "label": "For"
+          },
+          {
+            "key": "status",
+            "label": "Today"
+          },
+          {
+            "key": "stops",
+            "label": "Steps"
+          }
+        ]
+      }
+    },
+    "person": {
+      "label": "Person",
+      "plural": "People",
+      "mark": "person",
+      "hue": "cyan",
+      "index": {
+        "view": "table",
+        "sort": "title",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Person"
+          },
+          {
+            "key": "description",
+            "label": "What they do"
+          }
+        ]
+      }
+    },
+    "screen": {
+      "label": "Screen",
+      "plural": "Screens",
+      "mark": "screen",
+      "index": {
+        "view": "gallery"
+      }
+    },
+    "feature": {
+      "label": "Feature",
+      "plural": "Features",
+      "mark": "ring",
+      "index": {
+        "view": "table",
+        "filter": "status",
+        "find": true,
+        "sort": "title",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Feature"
+          },
+          {
+            "key": "status",
+            "label": "Checked"
+          },
+          {
+            "key": "description",
+            "label": "What the user gets"
+          }
+        ]
+      }
+    },
+    "concept": {
+      "label": "Concept",
+      "plural": "Concepts",
+      "mark": "diamond",
+      "hue": "violet",
+      "index": {
+        "view": "table",
+        "find": true,
+        "sort": "title",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Concept"
+          },
+          {
+            "key": "description",
+            "label": "What it means"
+          },
+          {
+            "key": "named",
+            "label": "Named in"
+          }
+        ]
+      }
+    },
+    "decision": {
+      "label": "Decision",
+      "plural": "Decisions",
+      "mark": "triangle",
+      "index": {
+        "view": "table",
+        "filter": "status",
+        "find": true,
+        "sort": "status",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Question"
+          },
+          {
+            "key": "status",
+            "label": "State"
+          },
+          {
+            "key": "answer",
+            "label": "Answer"
+          }
+        ]
+      }
+    },
+    "change": {
+      "label": "Change",
+      "plural": "Changes",
+      "mark": "square",
+      "index": {
+        "view": "table",
+        "filter": "status",
+        "sort": "status",
+        "columns": [
+          {
+            "key": "title",
+            "label": "Change"
+          },
+          {
+            "key": "status",
+            "label": "State"
+          },
+          {
+            "key": "description",
+            "label": "What was done"
+          }
+        ]
+      }
+    },
+    "statement": {
+      "label": "Statement",
+      "plural": "Statements"
+    }
+  },
+  "rels": {
+    "uses": {
+      "label": "Uses",
+      "reverse": "that use it"
+    },
+    "part-of": {
+      "label": "Part of",
+      "reverse": "inside it"
+    },
+    "for": {
+      "label": "For",
+      "reverse": "for them"
+    },
+    "shown-on": {
+      "label": "Shown on",
+      "reverse": "shown here"
+    },
+    "about": {
+      "label": "About",
+      "reverse": "about it"
+    },
+    "related": {
+      "label": "Related",
+      "reverse": "related",
+      "symmetric": true
+    }
+  },
+  "nav": [
+    {
+      "title": "Library",
+      "types": [
+        "part",
+        "journey",
+        "person",
+        "screen",
+        "feature",
+        "concept",
+        "decision",
+        "change"
+      ]
+    },
+    {
+      "title": "Pages",
+      "pages": true
+    }
+  ]
+}

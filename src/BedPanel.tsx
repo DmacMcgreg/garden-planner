@@ -39,7 +39,7 @@ export default function BedPanel({
 
   useEffect(() => {
     if (!selectedBedId || !listRef.current) return
-    const el = listRef.current.querySelector(`[data-bed-id="${selectedBedId}"]`)
+    const el = listRef.current.querySelector(`[data-bed-id="${CSS.escape(selectedBedId)}"]`)
     if (!el) return
     const section = el.closest('[id="section-beds"]')
     if (section) section.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -100,6 +100,7 @@ export default function BedPanel({
       {/* Add bed */}
       <div className="flex gap-1.5 mb-3">
         <select
+          aria-label="Plant type"
           value={addType}
           onChange={(e) => setAddType(e.target.value as PlantType)}
           className="flex-1 min-w-0 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
@@ -342,10 +343,11 @@ export default function BedPanel({
 
       {/* Reset */}
       <button
-        onClick={onReset}
+        disabled={beds.length === 0}
+        onClick={() => { if (window.confirm('Clear all beds from this garden?')) onReset() }}
         className="mt-2 w-full px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-400 transition-colors"
       >
-        Reset to layout defaults
+        Clear all beds
       </button>
     </section>
   )

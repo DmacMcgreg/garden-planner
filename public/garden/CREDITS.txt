@@ -1,0 +1,19 @@
+The garden uses CC0 photographic materials and plants from Poly Haven.
+The local versions use resized textures, single plant specimens and a simplified tree.
+
+https://polyhaven.com/a/japanese_cedar_planks
+https://polyhaven.com/a/grass_ground
+https://polyhaven.com/a/gravel_floor
+https://polyhaven.com/a/brown_mud_03
+https://polyhaven.com/a/forest_slope
+https://polyhaven.com/a/fern_02
+https://polyhaven.com/a/shrub_02
+https://polyhaven.com/a/tree_small_02
+https://polyhaven.com/license
+
+DM Sans and DM Serif Text use the SIL Open Font License.
+See DM-Sans-LICENSE.txt and DM-Serif-Text-LICENSE.txt.
+
+The tomato, lettuce, pepper and herb portraits were generated for this planner.
+The crop meshes and their leaf texture were authored for the interactive scene.
+The other 26 catalog portraits render the planner's own crop meshes.

@@ -2,11 +2,1084 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* Prevent the browser from intercepting touch gestures over the 3D canvas
+   (pinch-zoom / double-tap-zoom / rubber-band scroll) so OrbitControls owns
+   them. !important is required because r3f sets touch-action inline on the
+   canvas element. The sidebar still scrolls normally via its own container. */
+canvas {
+  touch-action: none !important;
+}
+
+/* Stop pull-to-refresh / rubber-banding on mobile while interacting with the
+   full-bleed 3D view. */
+#root {
+  overscroll-behavior: none;
+}
+
+/* Visible keyboard focus for accessibility. Only the :focus-visible subset so
+   mouse clicks don't paint a ring. Scoped to the app's interactive elements. */
+:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/garden/sans.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Serif Text';
+  src: url('/garden/serif.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+:root {
+  color-scheme: dark;
+  --canvas: #151f19;
+  --surface: #202c23;
+  --line: #38453a;
+  --ink: #f3f1df;
+  --muted: #b7c1b3;
+  --gold: #edc58a;
+  --active: #e0ead4;
+  --serif: 'DM Serif Text', Georgia, serif;
+}
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.garden-workspace {
+  height: 100dvh;
+  overflow: auto;
+  padding: clamp(18px, 3vh, 40px) clamp(18px, 4.5vw, 110px) 32px;
+  scrollbar-color: var(--line) var(--canvas);
+}
+.workspace-header,
+.planting-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.workspace-header {
+  margin-bottom: clamp(18px, 2.5vh, 32px);
+}
+.workspace-header h1,
+.planting-header h2,
+.clock-line strong {
+  font-family: var(--serif);
+  font-weight: 400;
+  letter-spacing: -0.044em;
+  line-height: 1.05;
+}
+.workspace-header h1 {
+  font-size: clamp(37px, 3.65vw, 78px);
+}
+.garden-context,
+.directory-actions,
+.scene-actions,
+.play-row,
+.view-bar,
+.render-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.garden-context button,
+.directory-actions > button,
+.text-action,
+.tool-action,
+.date-link,
+.scene-actions button,
+.view-bar button,
+.render-actions button,
+.play-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.garden-context button,
+.directory-actions > button {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 7px 9px;
+  border-radius: 5px;
+  min-height: 34px;
+}
+.garden-context svg {
+  width: 15px;
+  height: 15px;
+}
+.garden-context button:hover,
+.directory-actions > button:hover,
+.date-link:hover,
+.text-action:hover {
+  color: var(--ink);
+  background: #ffffff09;
+}
+.garden-context .settings-button,
+.garden-context .header-save {
+  border: 1px solid var(--line);
+}
+.garden-context .settings-button {
+  width: 35px;
+}
+.garden-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(255px, 21.5vw, 425px);
+  gap: clamp(12px, 1.05vw, 24px);
+}
+.garden-viewport,
+.sun-panel,
+.bed-card {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+.garden-viewport,
+.sun-panel {
+  height: clamp(420px, calc(100dvh - 264px), 870px);
+}
+.garden-viewport {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #303f2c;
+  min-width: 0;
+}
+.garden-viewport.expanded {
+  position: fixed;
+  inset: 8px;
+  z-index: 50;
+  height: auto;
+  box-shadow: 0 0 0 15px var(--canvas);
+}
+.scene-toolbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  pointer-events: none;
+}
+.scene-toolbar > * {
+  pointer-events: auto;
+}
+.scene-actions button,
+.scene-state,
+.view-bar,
+.render-actions,
+.compass-dial,
+.probe-prompt,
+.bed-pin {
+  background: rgba(21, 34, 24, 0.91);
+  color: #f1f1e3;
+  border: 1px solid #e1ebd62c;
+  box-shadow: 0 1px 5px #10180b26;
+}
+.scene-actions button,
+.render-actions button,
+.view-bar button {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 5px;
+  min-height: 33px;
+}
+.scene-actions button:hover,
+.view-bar button:hover,
+.render-actions button:hover {
+  background: #3b4a37;
+}
+.scene-actions svg,
+.view-bar svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.65;
+}
+.scene-state,
+.field-label,
+.bed-copy small,
+.graph-labels {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.scene-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+.scene-state i {
+  width: 6px;
+  height: 6px;
+  background: #c5d4a7;
+  border-radius: 50%;
+}
+.view-bar,
+.render-actions {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 6;
+  border-radius: 7px;
+  padding: 3px;
+  gap: 2px;
+}
+.view-bar button[aria-pressed='true'] {
+  background: var(--active);
+  color: #223027;
+}
+.render-actions {
+  left: 14px;
+  bottom: 62px;
+}
+.compass-dial {
+  position: absolute;
+  right: 15px;
+  bottom: 16px;
+  z-index: 6;
+  border-radius: 50%;
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  justify-items: center;
+}
+.compass-dial span {
+  font:
+    8px ui-monospace,
+    monospace;
+  color: var(--active);
+}
+.compass-dial i {
+  height: 14px;
+  width: 9px;
+  display: block;
+  background: linear-gradient(90deg, #8c9e82 50%, #f1f4da 50%);
+  clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%);
+}
+.bed-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font:
+    500 10px 'DM Sans',
+    sans-serif;
+  position: relative;
+}
+.bed-pin i {
+  height: 7px;
+  width: 7px;
+  border: 1px solid #ffffff72;
+  border-radius: 2px;
+}
+.bed-pin:after {
+  content: '';
+  position: absolute;
+  height: 9px;
+  top: 100%;
+  left: 50%;
+  border-left: 1px solid #f2eacdba;
+}
+.sun-panel {
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(16px, 1.42vw, 28px);
+  min-width: 0;
+}
+.sun-panel h2 {
+  font-weight: 600;
+  font-size: clamp(16px, 1.3vw, 24px);
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: clamp(14px, 2.2vh, 26px);
+}
+.sun-panel h2 svg {
+  color: var(--gold);
+  width: 33px;
+  height: 33px;
+  padding: 6px;
+  background: #b18b5730;
+  border: 1px solid #e9c38730;
+  border-radius: 6px;
+  stroke-width: 1.5;
+}
+.clock-block {
+  padding: clamp(16px, 2.7vh, 40px) 0 10px;
+}
+.field-label,
+.bed-copy small {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 10px;
+}
+.clock-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.clock-line strong {
+  font-size: clamp(38px, 3.15vw, 68px);
+  font-variant-numeric: lining-nums;
+}
+.clock-line small {
+  font:
+    12px 'DM Sans',
+    sans-serif;
+  letter-spacing: 0.02em;
+  margin-left: 5px;
+  color: var(--muted);
+}
+.light-tag {
+  font-size: 10px;
+  color: #f0d4a6;
+  line-height: 1.25;
+  padding: 4px 7px;
+  border-radius: 12px;
+  border: 1px solid #806d504d;
+  background: #7a63402e;
+  white-space: nowrap;
+}
+.sun-chart {
+  margin-top: auto;
+}
+.sun-chart svg {
+  width: 100%;
+  height: clamp(116px, 18vh, 240px);
+  cursor: crosshair;
+  touch-action: none;
+  overflow: visible;
+}
+.graph-guide {
+  stroke: #a2b09e;
+  stroke-width: 0.7;
+  stroke-opacity: 0.25;
+  stroke-dasharray: 2 5;
+}
+.graph-guide.marker {
+  stroke: var(--gold);
+  stroke-opacity: 0.85;
+}
+.graph-past,
+.graph-future {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.graph-future {
+  stroke: #ab9372;
+  stroke-dasharray: 2 5;
+}
+.sun-chart input {
+  width: 100%;
+  height: 20px;
+  accent-color: var(--gold);
+  cursor: pointer;
+  margin-top: 0;
+  display: block;
+}
+.graph-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+  margin: 2px 0 15px;
+}
+.play-row {
+  gap: 7px;
+}
+.play-row button {
+  border-radius: 6px;
+  height: 38px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.play-day {
+  background: var(--gold);
+  color: #30291e;
+  flex: 1;
+}
+.play-day:hover {
+  background: #f5d9aa;
+}
+.play-day svg {
+  fill: currentColor;
+  width: 12px;
+}
+.speed {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  min-width: 40px;
+}
+.speed:hover {
+  background: #ffffff10;
+}
+.sun-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: clamp(12px, 2vh, 25px) 0;
+  border-block: 1px solid var(--line);
+  margin-top: clamp(12px, 2vh, 25px);
+}
+.sun-metrics > div + div {
+  border-left: 1px solid var(--line);
+  padding-left: 13px;
+}
+.sun-metrics span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sun-metrics svg {
+  width: 13px;
+  height: 13px;
+}
+.sun-metrics strong {
+  display: block;
+  font:
+    500 clamp(15px, 1.15vw, 22px) ui-monospace,
+    monospace;
+  margin-top: 7px;
+}
+.date-link {
+  color: var(--muted);
+  font-size: 12px;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 13px 0 0;
+}
+.date-link svg:last-child {
+  margin-left: auto;
+}
+.planting-header {
+  justify-content: flex-start;
+  margin: clamp(17px, 2.3vh, 35px) 0 12px;
+  gap: 11px;
+}
+.planting-header h2 {
+  font-size: clamp(25px, 2vw, 39px);
+}
+.planting-header > span {
+  font:
+    11px ui-monospace,
+    monospace;
+  color: var(--muted);
+}
+.directory-actions {
+  margin-left: auto;
+  position: relative;
+  z-index: 7;
+}
+.directory-actions [role='status'] > div.absolute {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 4px;
+}
+.bed-directory {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.bed-card {
+  min-height: clamp(82px, 9vh, 122px);
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  position: relative;
+  background: var(--surface);
+  text-align: left;
+  border-radius: 9px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.bed-card:hover,
+.bed-card.selected {
+  border-color: #7d9176;
+  background: #29392b;
+}
+.bed-card img,
+.crop-symbol {
+  width: clamp(46px, 4.6vw, 87px);
+  height: clamp(46px, 4.6vw, 87px);
+  flex: none;
+  object-fit: contain;
+}
+.crop-symbol {
+  display: grid;
+  place-items: center;
+}
+.crop-symbol svg {
+  width: 32px;
+  height: 32px;
+}
+.bed-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bed-copy small {
+  font-size: 9px;
+}
+.bed-copy strong {
+  font-size: clamp(14px, 1.05vw, 20px);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.bed-copy > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.bed-copy > span svg {
+  flex: none;
+  color: var(--gold);
+}
+.card-arrow {
+  position: absolute;
+  right: 8px;
+  top: 9px;
+  color: #98ab92;
+  transform: rotate(-45deg);
+  width: 12px;
+}
+.empty-beds {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  padding: 20px;
+  border-radius: 8px;
+}
+.photo-compare {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.photo-compare img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #20281e;
+}
+.compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid white;
+}
+.compare-line span {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--canvas);
+  padding: 5px 8px;
+}
+.photo-compare input {
+  position: absolute;
+  inset: 35% 0;
+  width: 100%;
+  height: 30%;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+.photo-compare:focus-within .compare-line span {
+  outline: 3px solid var(--gold);
+}
+.probe-prompt {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 60px;
+  padding: 7px 10px;
+  text-align: center;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.planner-tools {
+  position: fixed;
+  inset: 12px 12px 12px auto;
+  margin: 0;
+  background: #202b24;
+  color: var(--ink);
+  width: min(390px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  height: fit-content;
+  overflow-y: auto;
+  border: 1px solid #546052;
+  border-radius: 13px;
+  box-shadow: 0 15px 70px #0008;
+  padding: 18px;
+}
+.planner-tools::backdrop {
+  background: #10181055;
+}
+.planner-tools header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.planner-tools header h2,
+.yard-editor h3 {
+  font: 26px var(--serif);
+  letter-spacing: -0.03em;
+}
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.tool-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-block: 1px solid var(--line);
+  padding: 12px 0;
+  font-size: 13px;
+}
+.tool-switch select,
+.size-inputs input {
+  background: #17221a;
+  color: var(--ink);
+  border: 1px solid #53614f;
+  padding: 7px 9px;
+  border-radius: 4px;
+}
+.tool-switch select {
+  flex: 1;
+}
+.tool-content section {
+  padding-left: 0;
+  padding-right: 0;
+}
+.path-toggle,
+.text-action,
+.tool-action {
+  font-size: 13px;
+  gap: 7px;
+}
+.path-toggle {
+  display: flex;
+  align-items: center;
+  margin-top: 8px;
+}
+.yard-editor h3 {
+  font-size: 21px;
+  margin: 17px 0 8px;
+}
+.yard-editor p,
+.yard-editor label {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.tool-action {
+  background: #dce7d1;
+  color: #1c2b21;
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin-top: 9px;
+}
+.tool-action:disabled {
+  opacity: 0.5;
+}
+.text-action {
+  color: var(--muted);
+  margin: 9px 4px;
+  padding: 5px;
+}
+.size-inputs {
+  display: flex;
+  gap: 10px;
+}
+.size-inputs label {
+  flex: 1;
+  min-width: 0;
+}
+.size-inputs input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+.photo-points {
+  position: relative;
+  margin-top: 12px;
+}
+.photo-points img {
+  width: 100%;
+  height: auto;
+}
+.photo-points.marking {
+  cursor: crosshair;
+}
+.photo-points span {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--canvas);
+  width: 19px;
+  height: 19px;
+  text-align: center;
+  font-size: 12px;
+}
+.yard-editor [role='status'] {
+  margin-top: 12px;
+}
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+@media (max-width: 1050px) {
+  .garden-workspace {
+    padding-inline: 22px;
+  }
+  .garden-stage {
+    grid-template-columns: minmax(0, 1fr) 258px;
+  }
+  .bed-directory {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bed-card {
+    min-height: 78px;
+  }
+}
+@media (max-width: 767px) {
+  .garden-workspace {
+    padding: 18px 14px 30px;
+  }
+  .workspace-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .workspace-header h1 {
+    font-size: 40px;
+  }
+  .garden-context {
+    width: 100%;
+    gap: 2px;
+  }
+  .garden-context button {
+    padding: 6px 7px;
+    min-height: 36px;
+    font-size: 12px;
+  }
+  .garden-context button:first-child {
+    padding-left: 0;
+  }
+  .garden-context .header-save {
+    margin-left: auto;
+  }
+  .garden-stage {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .garden-viewport {
+    height: clamp(315px, 51dvh, 540px);
+    border-radius: 9px;
+  }
+  .scene-toolbar {
+    inset: 9px 8px auto;
+  }
+  .scene-state {
+    font-size: 9px;
+    padding: 5px 7px;
+  }
+  .scene-actions {
+    gap: 4px;
+  }
+  .scene-actions button,
+  .view-bar button,
+  .render-actions button {
+    min-height: 36px;
+    padding: 7px;
+  }
+  .scene-toolbar .scene-state {
+    align-self: center;
+  }
+  .view-bar {
+    left: 8px;
+    bottom: 8px;
+  }
+  .render-actions {
+    left: 8px;
+    bottom: 56px;
+  }
+  .compass-dial {
+    bottom: 10px;
+    right: 9px;
+  }
+  .sun-panel {
+    height: auto;
+    padding: 16px;
+    border-radius: 9px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 17px;
+    align-items: center;
+  }
+  .sun-panel h2 {
+    grid-column: 1/-1;
+    margin-bottom: 10px;
+    font-size: 18px;
+    padding-bottom: 10px;
+  }
+  .clock-block {
+    padding: 0;
+  }
+  .clock-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 3px;
+  }
+  .clock-line strong {
+    font-size: 37px;
+  }
+  .sun-chart {
+    margin: 0;
+  }
+  .sun-chart svg {
+    height: 65px;
+  }
+  .graph-labels {
+    font-size: 8px;
+    margin-bottom: 0;
+  }
+  .graph-labels span:nth-child(2) {
+    display: none;
+  }
+  .play-row {
+    grid-column: 1/-1;
+    margin-top: 14px;
+  }
+  .play-row button {
+    height: 42px;
+  }
+  .sun-metrics {
+    grid-column: 1/-1;
+    margin-top: 12px;
+    padding: 10px 0;
+  }
+  .sun-metrics > div {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .sun-metrics strong {
+    font-size: 13px;
+    margin: 0;
+  }
+  .sun-metrics span {
+    font-size: 11px;
+  }
+  .date-link {
+    grid-column: 1/-1;
+    padding-top: 10px;
+  }
+  .planting-header {
+    gap: 6px;
+    margin: 18px 0 9px;
+  }
+  .directory-actions {
+    gap: 3px;
+  }
+  .directory-actions > button {
+    font-size: 11px;
+    padding: 3px;
+  }
+  .directory-actions > button svg {
+    display: none;
+  }
+  .bed-directory {
+    gap: 7px;
+  }
+  .bed-card {
+    padding: 9px 7px;
+    gap: 6px;
+    align-items: center;
+  }
+  .bed-card img,
+  .crop-symbol {
+    width: 40px;
+    height: 48px;
+  }
+  .bed-copy > span {
+    font-size: 10px;
+    display: block;
+  }
+  .bed-copy > span svg {
+    display: none;
+  }
+  .bed-copy strong {
+    font-size: 13px;
+  }
+  .bed-copy small {
+    font-size: 8px;
+  }
+  .planner-tools input,
+  .planner-tools select {
+    font-size: 16px;
+  }
+  .bed-pin {
+    font-size: 8px;
+    padding: 2px 4px;
+    gap: 3px;
+  }
+}
+@media (max-width: 360px) {
+  .scene-state {
+    display: none;
+  }
+  .scene-toolbar {
+    justify-content: flex-end;
+  }
+  .bed-directory {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .scene-actions button,
+  .view-bar button,
+  .render-actions button,
+  .icon-button,
+  .garden-context button,
+  .play-row button {
+    min-height: 44px;
+  }
+  .scene-actions button:not(.edit-planters),
+  .icon-button,
+  .garden-context .settings-button {
+    min-width: 44px;
+  }
+  .render-actions {
+    bottom: 64px;
+  }
+  .directory-actions [role='status'] > div.absolute {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    width: min(330px, calc(100vw - 24px));
+  }
+}
+
+.bed-pin-group { display: grid; justify-items: center; }
+.bed-pin-group small {
+  margin-top: 2px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #17241eed;
+  color: var(--ink);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.plant-catalog, .layout-picker { padding-block: 14px; }
+.plant-catalog > label, .layout-picker label { display: grid; gap: 6px; font-size: 13px; }
+.plant-catalog input, .layout-picker select {
+  border: 1px solid #53614f;
+  border-radius: 5px;
+  background: #17221a;
+  padding: 7px 9px;
+}
+.plant-catalog p, .layout-picker p { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.plant-catalog h3 { color: var(--gold); font-size: 13px; margin: 16px 0 4px; }
+.plant-catalog section button { display: flex; gap: 9px; align-items: center; width: 100%; text-align: left; padding: 5px 2px; border-bottom: 1px solid var(--line); }
+.plant-catalog section button:hover { background: #304033; }
+.plant-catalog img { width: 43px; height: 43px; object-fit: contain; }
+.plant-catalog strong, .plant-catalog small { display: block; }
+.plant-catalog small { font-size: 11px; color: var(--muted); }
+.plant-catalog button svg { margin-left: auto; }
+@media (min-width: 1024px) {
+  .garden-workspace.tools-open { padding-left: 24px; padding-right: 384px; }
+  .tools-open .garden-stage { grid-template-columns: minmax(0, 1fr) minmax(225px, 18vw); }
+  .tools-open .bed-directory { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .planner-tools[open] { width: 352px; z-index: 70; }
+  .tools-open .garden-viewport.expanded { right: 378px; }
+}
+@media (max-width: 620px) {
+  .planting-header { flex-wrap: wrap; gap: 8px; }
+  .directory-actions { flex-wrap: wrap; }
+}
+.expanded-readout {
+  position: absolute;
+  left: 14px;
+  top: 52px;
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: #152218e8;
+  color: var(--ink);
+  font-size: 11px;
+  pointer-events: none;
+}
+@media (max-width: 767px) {
+  .planner-tools {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 36px);
+    border-radius: 14px 14px 0 0;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
 }

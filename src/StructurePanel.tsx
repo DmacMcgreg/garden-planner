@@ -44,7 +44,7 @@ export default function StructurePanel({
             />
             <span className="font-medium truncate">{s.name}</span>
             <span className="text-gray-500 ml-auto text-[10px]">
-              {s.type === 'building' ? 'BLD' : 'FNC'}
+              {s.type === 'building' ? 'BLD' : s.type === 'tree' ? 'Tree' : 'FNC'}
             </span>
           </button>
         ))}
@@ -64,6 +64,7 @@ export default function StructurePanel({
         >
           + Fence
         </button>
+        <button onClick={() => onAdd('tree')} className="flex-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-medium">+ Tree</button>
       </div>
 
       {/* Selected structure editor */}
@@ -136,7 +137,7 @@ export default function StructurePanel({
           </div>
 
           {/* Color */}
-          <label className="flex items-center gap-2">
+          {selected.type !== 'tree' && <label className="flex items-center gap-2">
             <span className="text-[10px] text-gray-500">Color</span>
             <input
               type="color"
@@ -147,7 +148,7 @@ export default function StructurePanel({
             <span className="text-[10px] text-gray-500 font-mono">
               {selected.color}
             </span>
-          </label>
+          </label>}
 
           {/* Shadow toggles */}
           <div className="flex gap-3">
@@ -190,10 +191,11 @@ export default function StructurePanel({
 
       {/* Reset */}
       <button
-        onClick={onReset}
+        disabled={structures.length === 0}
+        onClick={() => { if (window.confirm('Clear all structures from this garden?')) onReset() }}
         className="mt-2 w-full px-2 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-400 transition-colors"
       >
-        Reset to defaults
+        Clear all structures
       </button>
     </section>
   )

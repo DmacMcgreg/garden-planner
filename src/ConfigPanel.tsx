@@ -23,7 +23,7 @@ export default function ConfigPanel({
 }: ConfigPanelProps) {
   const [saveName, setSaveName] = useState('')
   const [configs, setConfigs] = useState(() => loadSavedConfigs())
-  const [importError, setImportError] = useState<string | null>(null)
+  const [storageOrImportError, setStorageOrImportError] = useState<string | null>(null)
   const [flashMessage, setFlashMessage] = useState<string | null>(null)
   const [defaultName, setDefaultName] = useState<string | null>(() => getDefaultConfigName())
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -37,20 +37,30 @@ export default function ConfigPanel({
     setTimeout(() => setFlashMessage(null), 2000)
   }
 
+  function storeConfig(config: GardenConfig) {
+    try {
+      saveConfigToStorage(config)
+      setConfigs(loadSavedConfigs())
+      setStorageOrImportError(null)
+      return true
+    } catch {
+      setStorageOrImportError('Browser storage is unavailable or full. Use Export JSON to keep this garden.')
+      return false
+    }
+  }
+
   function handleSave() {
     const name = saveName.trim()
     if (!name) return
     const config = getCurrentConfig(name)
-    saveConfigToStorage(config)
-    setConfigs(loadSavedConfigs())
+    if (!storeConfig(config)) return
     setSaveName('')
     flash(`Saved "${name}"`)
   }
 
   function handleOverwrite(name: string) {
     const config = getCurrentConfig(name)
-    saveConfigToStorage(config)
-    setConfigs(loadSavedConfigs())
+    if (!storeConfig(config)) return
     flash(`Updated "${name}"`)
   }
 
@@ -95,19 +105,18 @@ export default function ConfigPanel({
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setImportError(null)
+    setStorageOrImportError(null)
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
       const config = parseConfigFromJson(reader.result as string)
       if (!config) {
-        setImportError('Invalid config file')
+        setStorageOrImportError('Invalid config file')
         return
       }
       onLoadConfig(config)
-      saveConfigToStorage(config)
-      setConfigs(loadSavedConfigs())
+      if (!storeConfig(config)) return
       flash(`Imported "${config.name}"`)
     }
     reader.readAsText(file)
@@ -168,9 +177,9 @@ export default function ConfigPanel({
         />
       </div>
 
-      {importError && (
+      {storageOrImportError && (
         <div className="mb-2 px-2 py-1 bg-red-900/40 border border-red-700/40 rounded text-[10px] text-red-300">
-          {importError}
+          {storageOrImportError}
         </div>
       )}
 

@@ -30,7 +30,7 @@
   .footer { position: absolute; bottom: 56px; left: 120px; font-size: 20px; color: #6b7280; }
 
   h1 { font-size: 128px; line-height: 1.02; font-weight: 800; color: #f9fafb; letter-spacing: -0.03em; }
-  h1 .accent { background: linear-gradient(90deg, #22c55e 0%, #fbbf24 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  h1 .accent { color: #fbbf24; }
   h2 { font-size: 84px; line-height: 1.05; font-weight: 800; color: #f9fafb; letter-spacing: -0.025em; margin-bottom: 40px; }
   h3 { font-size: 52px; line-height: 1.1; font-weight: 700; color: #f9fafb; letter-spacing: -0.02em; margin-bottom: 24px; }
   .eyebrow { font-size: 26px; font-weight: 600; color: #22c55e; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 32px; }
@@ -55,7 +55,7 @@
     border-radius: 24px;
     padding: 48px 40px;
   }
-  .stat .n { font-size: 110px; font-weight: 800; line-height: 1; background: linear-gradient(135deg, #22c55e 0%, #fbbf24 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.03em; }
+  .stat .n { font-size: 110px; font-weight: 800; line-height: 1; color: #fbbf24; letter-spacing: -0.03em; }
   .stat .l { font-size: 26px; font-weight: 500; color: #9ca3af; margin-top: 20px; text-transform: uppercase; letter-spacing: 1.5px; }
 
   /* Feature list */
@@ -126,6 +126,13 @@
   .tl-item .t { font-size: 24px; color: #22c55e; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
   .tl-item .h { font-size: 34px; font-weight: 600; color: #f9fafb; margin-top: 6px; }
   .tl-item .d { font-size: 24px; color: #9ca3af; margin-top: 8px; }
+
+  /* Storyboard */
+  .storyboard { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; margin-top: 16px; }
+  .story-frame { background: #000; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; overflow: hidden; aspect-ratio: 800/577; display: flex; flex-direction: column; }
+  .story-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .story-label { position: absolute; top: 16px; left: 16px; background: rgba(34,197,94,0.92); color: #052e16; font-size: 18px; font-weight: 700; letter-spacing: 1px; padding: 8px 14px; border-radius: 999px; text-transform: uppercase; }
+  .story-frame-wrap { position: relative; }
 </style>
 </head>
 <body>
@@ -135,11 +142,11 @@
   <div class="bar"></div>
   <div class="brand">Built with Claude Code</div>
   <div class="title-wrap">
-    <div class="eyebrow">A 12-hour build journal</div>
+    <div class="eyebrow">A build journal</div>
     <h1>I built a 3D<br/><span class="accent">backyard garden planner</span><br/>in one day.</h1>
     <div class="author">By <b>David McGregor</b> · Built with Claude Opus 4.6 + Claude Code · April 12, 2026</div>
   </div>
-  <div class="footer">linkedin · garden-planner</div>
+  <div class="footer">A real build story · 17 slides</div>
   <div class="page-num">01</div>
 </section>
 
@@ -149,11 +156,28 @@
   <div class="brand">The Premise</div>
   <div class="col">
     <div class="eyebrow">The problem</div>
-    <h2>Where should I put the<br/>tomatoes?</h2>
-    <p class="lead" style="max-width: 1500px;">Every spring I stare at my 24 × 10 ft Toronto backyard and guess which beds get enough sun. I wanted a <b style="color:#fbbf24">3D simulator</b> that shows the actual sun path across the season — and tells me when a plant is in the wrong place.</p>
+    <h2>A small yard.<br/>Tall buildings.<br/>Not enough sun.</h2>
+    <p class="lead" style="max-width: 1500px;">My backyard is <b style="color:#fbbf24">24 × 10 ft</b>. A three-story house on one side, other buildings around, half the back shared with a neighbour. I wanted to make absolute best use of the space. Not plant by <i>vibes</i>, but know exactly which spots get the sun hours each plant actually needs to thrive.</p>
   </div>
   <div class="footer">Built with Claude Code</div>
   <div class="page-num">02</div>
+</section>
+
+<!-- SLIDE 2B: THE INITIAL PROMPT -->
+<section class="slide dark">
+  <div class="bar"></div>
+  <div class="brand">The first ask</div>
+  <div class="col">
+    <div class="eyebrow">The full initial prompt · verbatim</div>
+    <h2 style="font-size:64px; margin-bottom: 28px">One prompt. Four photos.</h2>
+    <div class="prompt" style="font-size:22px; line-height:1.55; max-width: 1600px; padding: 32px 40px">
+      <span class="tag" style="font-size:16px">April 11, 2026 · initial prompt</span>
+      I'm giving you multiple angles of my backyard which is oriented WSW. In some of the photos are the position of the sun's path in winter and summer. We are planning a garden, and also placement of makeshift solar panels in the backyard. We want to plan out the best location for all the plants. Total space is about 24 ft long by 10 ft wide. There is a fence at back and on one side, and the entire back area is shared without a fence on opposite side. We can only use half that space. So total shared space is 24 × 20 ft but ours is 24 × 10 ft. House is also very tall, about 3 stories tall, and there are some other buildings around. Help us determine where to best plant all the plants for sun/shade coverage, and the panels. We might have like 4/5 panels, but that is secondary. Think carefully about this and provide 2-3 total options. We have peas, beans, cauliflower, broccoli, kale, peppers, tomatoes, cucumber, herbs, and a few others.<br/><br/>
+      <b style="color:#fbbf24">Create a react threejs tailwind app to visualize this layout. Think very carefully about the orientation and direction of the sun.</b>
+    </div>
+  </div>
+  <div class="footer">The entire project started from this single message + 4 backyard photos.</div>
+  <div class="page-num">03</div>
 </section>
 
 <!-- SLIDE 3: MAIN VIEW SCREENSHOT -->
@@ -175,9 +199,9 @@
   <div class="col">
     <div class="eyebrow">Stack</div>
     <h2>React · Three.js · math.</h2>
-    <p style="max-width:1500px">No backend. No auth. Everything lives in the browser. Sun position is computed from solar geometry — no APIs, no weather services, no location lookups required.</p>
+    <p style="max-width:1500px">No backend. No auth. Everything lives in the browser. Sun position is computed from solar geometry. No APIs, no weather services, no location lookups required.</p>
     <div class="pills">
-      <div class="pill"><b>React</b> 18</div>
+      <div class="pill"><b>React</b></div>
       <div class="pill"><b>TypeScript</b></div>
       <div class="pill"><b>Vite</b> + Bun</div>
       <div class="pill"><b>Three.js</b> via react-three-fiber</div>
@@ -188,7 +212,7 @@
     </div>
   </div>
   <div class="footer">Built with Claude Code</div>
-  <div class="page-num">04</div>
+  <div class="page-num">05</div>
 </section>
 
 <!-- SLIDE 5: STATS -->
@@ -197,17 +221,17 @@
   <div class="brand">By the numbers</div>
   <div class="col">
     <div class="eyebrow">The build, measured</div>
-    <h2>~12 hours. One day.</h2>
+    <h2>A few hours of prompting.</h2>
     <div class="stats">
-      <div class="stat"><div class="n">12h</div><div class="l">Elapsed time</div></div>
+      <div class="stat"><div class="n">1</div><div class="l">Initial prompt</div></div>
       <div class="stat"><div class="n">16</div><div class="l">Git commits</div></div>
       <div class="stat"><div class="n">7</div><div class="l">Claude sessions</div></div>
       <div class="stat"><div class="n">10+</div><div class="l">Major features</div></div>
     </div>
-    <p style="margin-top: 48px; font-size: 32px; color:#9ca3af">Two concentrated bursts: a 12-minute foundational build just after midnight, then feature refinement through the afternoon.</p>
+    <p style="margin-top: 48px; font-size: 32px; color:#9ca3af">Total wall-clock was a couple of days, but actual time at the keyboard prompting was only a few hours. Claude ran while I made dinner, went for walks, and reviewed the diffs on the way back.</p>
   </div>
-  <div class="footer">April 12, 2026</div>
-  <div class="page-num">05</div>
+  <div class="footer">April 11–12, 2026</div>
+  <div class="page-num">06</div>
 </section>
 
 <!-- SLIDE 6: SUN PATH SCREENSHOT -->
@@ -232,12 +256,12 @@
     <ul class="features">
       <li><b>Plan mode first.</b> For anything non-trivial I asked Claude to draft an implementation plan, then approved it before any file was touched.</li>
       <li><b>Small, scoped prompts.</b> One feature per prompt. Each prompt read like a product spec, not a code request.</li>
-      <li><b>Commit after every feature.</b> 16 commits in 12 hours — each one buildable and revertable.</li>
+      <li><b>Commit after every feature.</b> 16 commits, each one buildable and revertable.</li>
       <li><b>Auto-memory for corrections.</b> Mistakes (like the localStorage incident) were written to persistent memory so they wouldn't repeat.</li>
     </ul>
   </div>
   <div class="footer">Claude Code · Opus 4.6 (1M context)</div>
-  <div class="page-num">07</div>
+  <div class="page-num">08</div>
 </section>
 
 <!-- SLIDE 8: ACTUAL PROMPTS -->
@@ -248,13 +272,13 @@
     <div class="eyebrow">Real prompts I typed</div>
     <h2 style="font-size:72px">Exactly what I asked for.</h2>
     <div class="prompts">
-      <div class="prompt"><span class="tag">Initial build</span>a 3D backyard garden planner for a 24×10 ft yard in Ontario. React, Three.js, Vite, Tailwind. Sun path, shadows, heatmap overlay.</div>
-      <div class="prompt"><span class="tag">Feature: alerts</span>the alert system we have if plants are not in optimal location is not working well in the sidebar. there needs to be a notification icon/panel in top right of the 3d canvas... if the issue is with the sun exposure, it should trigger the direct sun gradient map to 100% opacity.</div>
-      <div class="prompt"><span class="tag">Refinement</span>its asking for 6+ peak sun hours... right now 6+ is not granular enough, can we get more granular so i know which ones might need the most? like one might need 10, another might need 8, etc</div>
+      <div class="prompt"><span class="tag">Feature: alerts panel</span>the alert system we have if plants are not in optimal location is not working well in the sidebar. there needs to be a notification icon/panel in top right of the 3d canvas... if the issue is with the sun exposure, it should trigger the direct sun gradient map to 100% opacity.</div>
+      <div class="prompt"><span class="tag">Refinement: granular PSH</span>its asking for 6+ peak sun hours... right now 6+ is not granular enough, can we get more granular so i know which ones might need the most? like one might need 10, another might need 8, etc</div>
+      <div class="prompt"><span class="tag">Scope reset</span>remove the concept of pre-defined or pre-programmed 'layouts' as everything is custom now. remove all markings or custom pre-defined designs. only the ones the user chooses to add and save.</div>
     </div>
   </div>
   <div class="footer">Verbatim from session transcripts</div>
-  <div class="page-num">08</div>
+  <div class="page-num">09</div>
 </section>
 
 <!-- SLIDE 9: MORE PROMPTS -->
@@ -265,19 +289,19 @@
     <div class="eyebrow">Mid-project pivots</div>
     <h2 style="font-size:72px">Features requested on the fly.</h2>
     <div class="prompts">
-      <div class="prompt"><span class="tag">Scope reset</span>remove the concept of pre-defined or pre-programmed 'layouts' as everything is custom now. remove all markings or custom pre-defined designs — only the ones the user chooses to add and save.</div>
       <div class="prompt"><span class="tag">Camera controls</span>allow panning the camera and resetting back to center. ctrl+mouse or cmd+mouse on mac. allow setting distance of the visual sun path further away with a slider.</div>
       <div class="prompt"><span class="tag">Global support</span>create a feature where user can enter their city to get the sun location. plan to include 1000 large cities across the world with their lat/long for sun purposes rather than hardcoding it to ontario 43.7°N.</div>
+      <div class="prompt" style="background: rgba(239, 68, 68, 0.08); border-left-color: #ef4444; color: #fecaca"><span class="tag" style="color:#ef4444">The incident</span>i seem to have lost my garden configs? ... make note never to clear localstorage again without permission</div>
     </div>
   </div>
   <div class="footer">Verbatim from session transcripts</div>
-  <div class="page-num">09</div>
+  <div class="page-num">10</div>
 </section>
 
 <!-- SLIDE 10: HEATMAP SCREENSHOT -->
 <section class="slide image">
   <div class="img-slide">
-    <img src="screenshots/03-heatmap-selected.png" alt="Heatmap feature">
+    <img src="screenshots/08-heatmap-detail.png" alt="Heatmap feature">
     <div class="img-caption">
       <div class="eyebrow">Sun heatmap</div>
       <h3>Multi-layer exposure maps</h3>
@@ -298,18 +322,36 @@
   </div>
 </section>
 
-<!-- SLIDE 12: LESSONS LEARNED -->
+<!-- SLIDE 12: ANIMATED WALKTHROUGH STORYBOARD -->
+<section class="slide dark">
+  <div class="bar"></div>
+  <div class="brand">In motion</div>
+  <div class="col">
+    <div class="eyebrow">Frames from a live walkthrough</div>
+    <h2 style="font-size:68px; margin-bottom: 24px">Scrub the sun. Watch the shadows move.</h2>
+    <p style="max-width: 1600px; font-size: 28px; color: #9ca3af; margin-bottom: 40px">Drag the time slider and the sun, heatmap, and shadows update in real time. Three frames from a single session walking through the same garden at different moments.</p>
+    <div class="storyboard">
+      <div class="story-frame-wrap"><div class="story-frame"><img src="screenshots/10-story-1.png" alt="Sun path overview"></div><div class="story-label">Sun path</div></div>
+      <div class="story-frame-wrap"><div class="story-frame"><img src="screenshots/10-story-2.png" alt="Late-day shadows"></div><div class="story-label">Shadows</div></div>
+      <div class="story-frame-wrap"><div class="story-frame"><img src="screenshots/10-story-3.png" alt="Top-down heatmap"></div><div class="story-label">Top-down</div></div>
+    </div>
+  </div>
+  <div class="footer">Note: PDF renders static frames. The full animated version lives in the repo.</div>
+  <div class="page-num">13</div>
+</section>
+
+<!-- SLIDE 13: LESSONS LEARNED -->
 <section class="slide amber">
   <div class="bar"></div>
   <div class="brand">Lessons</div>
   <div class="col">
-    <div class="eyebrow">The biggest mistake</div>
-    <h2>I lost every saved config.<br/>Once.</h2>
-    <p class="lead" style="max-width:1500px; margin-bottom: 32px">During a "fresh-load" test, Claude ran <span class="mono" style="background: rgba(0,0,0,0.4); padding: 4px 12px; border-radius: 6px; font-size:30px">localStorage.clear()</span> and nuked three saved garden layouts I'd been iterating on for an hour.</p>
-    <p class="lead" style="max-width:1500px; color:#fbbf24">The fix: a persistent memory rule — <b>never clear localStorage without explicit permission</b>. Written once, respected every session after.</p>
+    <div class="eyebrow">The incident</div>
+    <h2 style="font-size:76px">I lost every saved config.<br/>Then Claude recovered them.</h2>
+    <p style="max-width:1600px; margin-bottom: 32px; font-size:34px; line-height:1.45">During a "fresh-load" test, Claude ran <span class="mono" style="background: rgba(0,0,0,0.4); padding: 4px 12px; border-radius: 6px; font-size:28px">localStorage.clear()</span> and nuked three saved garden layouts. I had a Save feature. I had JSON export. <b style="color:#ef4444">Neither was enough.</b></p>
+    <p style="max-width:1600px; font-size:34px; line-height:1.45; color:#a7f3d0">The save: Claude found the browser's LevelDB backups, parsed them, and wrote a restore snippet. Every config came back. <b style="color:#fbbf24">Write your guardrails in CLAUDE.md. Take real backups.</b></p>
   </div>
-  <div class="footer">Auto-memory makes mistakes teach.</div>
-  <div class="page-num">12</div>
+  <div class="footer">Complacency is the bug. Guardrails are the fix.</div>
+  <div class="page-num">14</div>
 </section>
 
 <!-- SLIDE 13: WHAT GOT BUILT -->
@@ -317,21 +359,21 @@
   <div class="bar"></div>
   <div class="brand">Ship list</div>
   <div class="col">
-    <div class="eyebrow">Shipped in one day</div>
+    <div class="eyebrow">Shipped</div>
     <h2>Everything I wanted.</h2>
-    <ul class="features">
+    <ul class="features" style="font-size:32px">
       <li><b>Interactive 3D viewport</b> with drag-resize gizmos for beds and structures</li>
-      <li><b>Solar geometry engine</b> — declination, altitude, azimuth, ray-cast shadows</li>
-      <li><b>Multi-instance sun heatmaps</b> — independent bounds, opacity, and modes</li>
-      <li><b>30-plant library</b> with per-plant pH and peak-sun-hour thresholds</li>
-      <li><b>Smart alert panel</b> — click to focus bed, auto-flash heatmap, dismiss-until-moved</li>
-      <li><b>Save/load configs</b> with JSON import/export</li>
-      <li><b>Configurable yard orientation</b>, compass rose, measurement overlay</li>
-      <li><b>Sun probe</b> for point-sampling exposure anywhere in the yard</li>
+      <li><b>Solar geometry engine:</b> declination, altitude, azimuth, ray-cast shadows against every wall and fence</li>
+      <li><b>City picker:</b> pick any of 1000+ global cities, sun path auto-adjusts to your latitude/longitude</li>
+      <li><b>Multi-instance sun heatmaps</b> with independent bounds, opacity, and modes (peak sun hours, direct sun, total daylight)</li>
+      <li><b>30-plant library with pH, spacing &amp; PSH thresholds.</b> Resize a bed and it tells you exactly how many plants fit</li>
+      <li><b>Smart alert panel:</b> click an alert to focus the bed and auto-flash the sun heatmap</li>
+      <li><b>Save/load configs</b> with JSON import/export and localStorage persistence</li>
+      <li><b>Configurable yard orientation</b>, compass rose, measurement overlay, and point-sample sun probe</li>
     </ul>
   </div>
-  <div class="footer">Every feature from user request to shipped — same day.</div>
-  <div class="page-num">13</div>
+  <div class="footer">Every feature from user request to shipped, in a handful of prompts.</div>
+  <div class="page-num">15</div>
 </section>
 
 <!-- SLIDE 14: TAKEAWAYS -->
@@ -341,30 +383,30 @@
   <div class="col">
     <div class="eyebrow">What I learned</div>
     <h2>The lesson isn't "AI is fast."</h2>
-    <p class="lead" style="max-width:1600px; margin-bottom: 40px">It's that <b style="color:#22c55e">planning is the work now</b>. The best hours of this build were the ones where I sat with a plan before any code got written. Claude executed; I architected.</p>
+    <p class="lead" style="max-width:1600px; margin-bottom: 40px">It's that <b style="color:#22c55e">planning is the work now</b>. The best moments of this build were the ones where I sat with a plan before any code got written. Claude executed; I architected.</p>
     <ul class="features" style="font-size:32px">
       <li><b>Spec like a PM, not a coder.</b> Describe the user-visible behavior, let Claude pick the implementation.</li>
       <li><b>Commit relentlessly.</b> Every feature is a checkpoint. Reverts are free.</li>
+      <li><b>Write guardrails in CLAUDE.md, even for toys.</b> The difference between "real product" mode and "side project" mode is one file.</li>
       <li><b>Let mistakes become rules.</b> Auto-memory turns one-time incidents into permanent guardrails.</li>
-      <li><b>Trust but verify.</b> Read every diff. Run the dev server. Open the browser.</li>
     </ul>
   </div>
   <div class="footer">Built with Claude Code · Opus 4.6</div>
-  <div class="page-num">14</div>
+  <div class="page-num">16</div>
 </section>
 
-<!-- SLIDE 15: CTA -->
+<!-- SLIDE 16: CTA -->
 <section class="slide dark">
   <div class="bar"></div>
   <div class="brand">Thanks</div>
   <div class="title-wrap">
     <div class="eyebrow">Questions? Thoughts?</div>
-    <h1>What would you build<br/><span class="accent">in 12 hours?</span></h1>
+    <h1>What's the one thing you<br/>could build this weekend<br/><span class="accent">with one good prompt?</span></h1>
     <div class="author">Follow me for more build journals · <b>David McGregor</b></div>
     <p style="margin-top:48px; font-size:28px; color:#6b7280">React · Three.js · TypeScript · Claude Code · Opus 4.6 (1M context)</p>
   </div>
   <div class="footer">#BuildInPublic #ClaudeCode #WebDev #ThreeJS</div>
-  <div class="page-num">15</div>
+  <div class="page-num">17</div>
 </section>
 
 </body>

@@ -180,8 +180,9 @@ export function currentHour(): number {
 }
 
 export function formatTime(hour: number): string {
-  const h = Math.floor(hour);
-  const m = Math.round((hour - h) * 60);
+  const minutes = ((Math.round(hour * 60) % 1440) + 1440) % 1440;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
   const period = h >= 12 ? 'PM' : 'AM';
   const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
   return `${displayH}:${m.toString().padStart(2, '0')} ${period}`;
@@ -302,6 +303,24 @@ function rayIntersectsAABB(
  * Check if a point on the ground is in shadow at a given sun position.
  * Casts a ray from the point toward the sun and tests against all shadow casters.
  */
+type ShadeObject = Pick<import('./types').Structure, 'position' | 'size' | 'castShadow'> & { type?: string }
+
+function shadowCasters(structures: ShadeObject[]): ShadowCaster[] {
+  return structures.filter(s => s.castShadow).flatMap(s => {
+    if (s.type !== 'tree') return [{ aabb: structureToAABB(s.position, s.size) }]
+    const [x, y, z] = s.position, [w, h, d] = s.size
+    // Approximate the opaque crown and narrow trunk separately at planning scale.
+    return [
+      { aabb: structureToAABB([x, y + 0.16 * h, z], [w * 0.77, h * 0.58, d * 0.77]) },
+      { aabb: structureToAABB([x, y - 0.25 * h, z], [w * 0.075, h * 0.5, d * 0.075]) },
+    ]
+  })
+}
+
+export function bedInSun(x: number, z: number, sun: SunPosition, structures: import('./types').Structure[]): boolean {
+  return !isPointInShadow(x, z, sun, shadowCasters(structures))
+}
+
 function isPointInShadow(
   px: number, pz: number,
   sun: SunPosition,
@@ -341,17 +360,15 @@ export function calculateSunExposure(
   pointZ: number,
   dayOfYear: number,
   yardHeadingDeg: number,
-  structures: { position: [number, number, number]; size: [number, number, number]; castShadow: boolean }[],
+  structures: ShadeObject[],
   location: SunLocation = DEFAULT_LOCATION,
 ): SunExposureResult {
   const TIME_STEP = 0.25; // 15-minute increments
-  const START_HOUR = 4;
-  const END_HOUR = 22;
+  const START_HOUR = 0;
+  const END_HOUR = 24;
 
   // Build shadow casters from structures that cast shadows
-  const casters: ShadowCaster[] = structures
-    .filter((s) => s.castShadow)
-    .map((s) => ({ aabb: structureToAABB(s.position, s.size) }));
+  const casters = shadowCasters(structures);
 
   const hourly: HourlyExposure[] = [];
   let directSunHours = 0;
@@ -359,7 +376,7 @@ export function calculateSunExposure(
   let peakIntensity = 0;
   let peakHour = 12;
 
-  for (let h = START_HOUR; h <= END_HOUR; h += TIME_STEP) {
+  for (let h = START_HOUR; h < END_HOUR; h += TIME_STEP) {
     const sun = getSunPosition(dayOfYear, h, yardHeadingDeg, location);
 
     if (!sun.isAboveHorizon) continue;
@@ -404,6 +421,107 @@ export function calculateSunExposure(
     energyRating: Math.round(energyRating * 10) / 10,
     hourly,
   };
+}
+
+/**
+ * Calculate sun exposure for MANY points in one pass.
+ *
+ * This is output-equivalent to calling {@link calculateSunExposure} once per
+ * point, but precomputes the per-day sun positions and shadow casters a single
+ * time and reuses them across every point. The cost is O(steps × points)
+ * either way, but the per-step `getSunPosition` + caster build is paid once
+ * instead of `points.length` times — a meaningful win when the caller needs to
+ * evaluate every garden bed (e.g. the alerts computation) on each state change.
+ *
+ * @param points   - Array of [x, z] scene-space coordinates.
+ * @param ...rest  - Identical params to calculateSunExposure.
+ * @returns One SunExposureResult per input point, in the same order.
+ */
+export function calculateSunExposureBatch(
+  points: Array<{ x: number; z: number }>,
+  dayOfYear: number,
+  yardHeadingDeg: number,
+  structures: ShadeObject[],
+  location: SunLocation = DEFAULT_LOCATION,
+): SunExposureResult[] {
+  if (points.length === 0) return [];
+
+  // These constants MUST match calculateSunExposure exactly so the two
+  // functions produce identical outputs (see the equivalence test).
+  const TIME_STEP = 0.25;
+  const START_HOUR = 0;
+  const END_HOUR = 24;
+
+  // Build shadow casters once.
+  const casters = shadowCasters(structures);
+
+  // Precompute sun positions + sin(alt) once for the whole day. The hour is
+  // stored so callers (hourly breakdown, peakHour) get the same values the
+  // per-point function produces.
+  const sunSteps: { sun: SunPosition; hour: number; sinAlt: number; isHalfHour: boolean }[] = [];
+  for (let h = START_HOUR; h < END_HOUR; h += TIME_STEP) {
+    const sun = getSunPosition(dayOfYear, h, yardHeadingDeg, location);
+    if (!sun.isAboveHorizon) continue;
+    sunSteps.push({
+      sun,
+      hour: h,
+      sinAlt: Math.sin(sun.altitudeDeg * DEG2RAD),
+      // Record hourly breakdown at whole/half hours, matching the per-point fn.
+      isHalfHour: h % 0.5 === 0,
+    });
+  }
+
+  const results: SunExposureResult[] = new Array(points.length);
+
+  for (let p = 0; p < points.length; p++) {
+    const px = points[p].x;
+    const pz = points[p].z;
+
+    const hourly: HourlyExposure[] = [];
+    let directSunHours = 0;
+    let peakSunHours = 0;
+    let peakIntensity = 0;
+    let peakHour = 12;
+
+    for (let s = 0; s < sunSteps.length; s++) {
+      const { sun, hour, sinAlt, isHalfHour } = sunSteps[s];
+      const obstructed = isPointInShadow(px, pz, sun, casters);
+
+      // Only record at whole/half hours for the breakdown, matching the
+      // per-point function's `if (h % 0.5 === 0)` rule.
+      if (isHalfHour) {
+        hourly.push({
+          hour,
+          altitudeDeg: sun.altitudeDeg,
+          azimuthDeg: sun.azimuthDeg,
+          intensity: sun.intensity,
+          isObstructed: obstructed,
+        });
+      }
+
+      if (!obstructed) {
+        directSunHours += TIME_STEP;
+        peakSunHours += sinAlt * TIME_STEP;
+        if (sun.intensity > peakIntensity) {
+          peakIntensity = sun.intensity;
+          peakHour = hour;
+        }
+      }
+    }
+
+    const energyRating = Math.min(10, (peakSunHours / 8) * 10);
+
+    results[p] = {
+      directSunHours: Math.round(directSunHours * 100) / 100,
+      peakSunHours: Math.round(peakSunHours * 100) / 100,
+      peakIntensity: Math.round(peakIntensity * 100) / 100,
+      peakHour,
+      energyRating: Math.round(energyRating * 10) / 10,
+      hourly,
+    };
+  }
+
+  return results;
 }
 
 /* ------------------------------------------------------------------ */
@@ -498,7 +616,7 @@ export function createDefaultHeatmap(id: string, name: string): HeatmapInstance 
 export function calculateHeatmapGrid(
   dayOfYear: number,
   yardHeadingDeg: number,
-  structures: { position: [number, number, number]; size: [number, number, number]; castShadow: boolean }[],
+  structures: ShadeObject[],
   resolution: number = 1,
   bounds: HeatmapBounds = DEFAULT_HEATMAP_BOUNDS,
   location: SunLocation = DEFAULT_LOCATION,
@@ -515,14 +633,12 @@ export function calculateHeatmapGrid(
   const energyRating = new Float32Array(totalCells);
 
   // Precompute shadow casters
-  const casters: ShadowCaster[] = structures
-    .filter((s) => s.castShadow)
-    .map((s) => ({ aabb: structureToAABB(s.position, s.size) }));
+  const casters = shadowCasters(structures);
 
   // Precompute sun positions for all daylight time steps
   const TIME_STEP = 0.5; // 30-min steps for heatmap (faster than probe's 15-min)
   const sunSteps: { sun: SunPosition; sinAlt: number }[] = [];
-  for (let h = 4; h <= 22; h += TIME_STEP) {
+  for (let h = 0; h < 24; h += TIME_STEP) {
     const sun = getSunPosition(dayOfYear, h, yardHeadingDeg, location);
     if (sun.isAboveHorizon) {
       sunSteps.push({

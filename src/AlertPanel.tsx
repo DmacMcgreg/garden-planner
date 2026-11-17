@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import type { BedConfig, BedAlert } from './types'
-import { PLANT_PRESETS } from './types'
 import { SectionHeader, IconBell } from './SectionHeader'
 
 interface AlertPanelProps {
   alerts: BedAlert[]
   dismissedCount: number
   beds: BedConfig[]
-  onSelectBed: (id: string) => void
+  onSelectBed: (id: string, type: BedAlert['type']) => void
   onDismiss: (bedId: string, alertType: string) => void
   onTriggerSunHeatmap: () => void
 }
@@ -43,13 +42,11 @@ export default function AlertPanel({
 
   function bedName(bedId: string): string {
     const bed = beds.find((b) => b.id === bedId)
-    if (!bed) return bedId
-    if (bed.plantType) return PLANT_PRESETS[bed.plantType].name
-    return bed.name
+    return bed?.name || bedId
   }
 
   function handleAlertClick(alert: BedAlert) {
-    onSelectBed(alert.bedId)
+    onSelectBed(alert.bedId, alert.type)
     if (alert.type === 'sun-exposure') {
       onTriggerSunHeatmap()
     }
@@ -57,10 +54,23 @@ export default function AlertPanel({
   }
 
   return (
-    <div ref={panelRef} className="relative">
-      {/* Notification badge button */}
+    <div
+      ref={panelRef}
+      className="relative"
+      role="status"
+      aria-live="polite"
+    >
+      {/* Notification badge button — announced to assistive tech as a live region. */}
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-label={
+          alerts.length === 0
+            ? 'No plant alerts'
+            : `${alerts.length} plant alert${alerts.length === 1 ? '' : 's'}${
+                dismissedCount > 0 ? `, ${dismissedCount} dismissed` : ''
+              }`
+        }
+        aria-expanded={expanded}
         className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg backdrop-blur-sm text-sm font-medium transition-colors ${
           expanded
             ? 'bg-gray-900/90 text-white'

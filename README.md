@@ -26,6 +26,16 @@ Garden Planner is an interactive 3D tool for planning a garden in a specific phy
 
 It started as a planner for a 24 × 10 ft backyard in Ontario and has grown into a general-purpose tool that works anywhere in the world.
 
+## Explore the garden
+
+A new garden opens with cherry tomatoes, salad greens, sweet peppers and culinary herbs. Select **Play day** to watch shadows cross the beds. Each planting card shows daily direct sun at the bed center and opens its editor.
+
+Choose **Add plants** to search the original 30 plants by name. The catalog shows each crop’s planting distance, peak sun hours, soil pH, and trellis needs. Choose **Garden layouts** in **Garden tools** to apply the original row, companion, or raised-bed arrangement with its paths and solar panels. **Starter beds** returns the four demo beds.
+
+**Render** shows the garden from a lower viewpoint. **3D orbit** lets you inspect the planting from any side. In **Plan**, select a bed and drag its center or handles to move, resize or rotate it. The camera button in **Render** opens the original-yard photo, measurement and location tools.
+
+[Visual walkthrough and verification](docs/garden-demo/preview.html)
+
 ## Why?
 
 Grocery prices have gone feral. A head of lettuce is pushing $4, a pint of tomatoes $6, and "shrinkflation" means the bag you bought last year is quietly 20% smaller this year. Growing even a fraction of your own produce is suddenly one of the highest-ROI weekend projects you can take on — but only if you get it right.
@@ -58,9 +68,9 @@ Consider it a small, practical way to fight back against the grocery aisle.
 
 <div align="center">
 
-<img src="presentation/screenshots/01-main-view.png" alt="Main 3D view" width="720" />
+<img src="docs/garden-demo/bundle/assets/desktop.webp" alt="Four planted beds in the orbit view beside the sunlight simulator" width="720" />
 
-*Main view — sun arc, garden beds, structures, and the sidebar in default framing.*
+*The Toronto starter garden and its planting directory.*
 
 <img src="presentation/screenshots/08-heatmap-detail.png" alt="Peak-sun-hours heatmap with labeled beds" width="720" />
 
@@ -96,9 +106,12 @@ bun run build
 
 # Preview the production build
 bun run preview
+
+# Run the test suite (golden-value sun-math + optimisation equivalence checks)
+bun run test
 ```
 
-If you don't have Bun, `npm install` / `npm run dev` / `npm run build` work too — Vite is the actual build tool.
+If you don't have Bun, `npm install` / `npm run dev` / `npm run build` / `npm test` work too — Vite is the actual build tool.
 
 ## Project layout
 
@@ -118,7 +131,10 @@ src/
 ├── StructurePanel.tsx Sidebar panel: structures (buildings, fences) CRUD.
 ├── ConfigPanel.tsx   Sidebar panel: save/load, localStorage, JSON import/export.
 ├── AlertPanel.tsx    Sidebar panel: bed alerts (insufficient sun, wrong spacing).
-├── NavSidebar.tsx    Section navigation sidebar.
+├── PlannerTools.tsx  Responsive editor for beds, structures, maps and saved gardens.
+├── GardenLandscape.tsx   Garden materials, plants, timber and tree rendering.
+├── SunlightPanel.tsx     Interactive daylight chart and playback.
+├── YardPhoto.tsx         Original-yard photo, GPS lookup and measurement controls.
 └── SectionHeader.tsx Shared sidebar section header + icon set.
 ```
 

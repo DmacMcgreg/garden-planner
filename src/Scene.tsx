@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Html, Line, TransformControls, Grid } from '@react-three/drei'
-import { DoubleSide, BoxGeometry, Vector3, Vector2, Plane, Raycaster, DataTexture, RGBAFormat, UnsignedByteType, LinearFilter, ClampToEdgeWrapping, type Mesh } from 'three'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { OrbitControls, Html, Line, TransformControls, Grid, OrthographicCamera } from '@react-three/drei'
+import { DoubleSide, BoxGeometry, Vector3, Vector2, Plane, Raycaster, DataTexture, RGBAFormat, UnsignedByteType, LinearFilter, ClampToEdgeWrapping, TOUCH, type Mesh, type Group, OrthographicCamera as ThreeOrthoCamera } from 'three'
+import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
 import {
   getSunPosition,
   degreesToCompass,
@@ -13,8 +13,9 @@ import {
   type HeatmapMode,
   type HeatmapInstance,
 } from './sun'
-import { PLANT_PRESETS } from './types'
-import type { BedConfig, Structure, MeasurementUnit } from './types'
+import { GardenSky, GardenGround, GardenBorder, StructureBody, PlantedBed } from './GardenLandscape'
+import { gardenBounds, type GardenView, type YardSize } from './garden'
+import type { BedConfig, Structure, MeasurementUnit, LayoutConfig, PanelConfig, PathConfig } from './types'
 
 const DEG2RAD = Math.PI / 180
 
@@ -24,6 +25,14 @@ const DEG2RAD = Math.PI / 180
 // purely a viewing aid.
 
 interface SceneProps {
+  layout?: LayoutConfig
+  yardGuides: boolean
+  view: GardenView
+  yard: YardSize
+  labels: boolean
+  original: boolean
+  landscape: boolean
+  showSunPath: boolean
   season: Season
   dayOfYear: number
   hour: number
@@ -64,6 +73,8 @@ export default function GardenScene(props: SceneProps) {
   return (
     <Canvas
       shadows
+      frameloop="demand"
+      dpr={[1, 1.6]}
       camera={{ position: [-5, 28, 28], fov: 45, near: 0.1, far: 500 }}
       onPointerMissed={(e) => {
         // Only deselect if the click was on the canvas, not the sidebar
@@ -81,6 +92,7 @@ export default function GardenScene(props: SceneProps) {
 }
 
 function SceneContent({
+  layout, yardGuides, view, yard, labels, original, landscape, showSunPath,
   season,
   dayOfYear,
   hour,
@@ -129,15 +141,51 @@ function SceneContent({
     }
   })
 
-  // Reset camera to default framing when parent increments the nonce.
-  const firstResetRun = useRef(true)
-  useEffect(() => {
-    if (firstResetRun.current) {
-      firstResetRun.current = false
-      return
+  const camera = useThree(s => s.camera)
+  const size = useThree(s => s.size)
+  const invalidate = useThree(s => s.invalidate)
+  const contents = useRef({ beds, structures, heatmaps })
+  useLayoutEffect(() => { contents.current = { beds, structures, heatmaps } }, [beds, structures, heatmaps])
+  useLayoutEffect(() => {
+    const aspect = size.width / Math.max(1, size.height)
+    const orbit = controlsRef.current
+    const fit = Math.max(yard.width / aspect, yard.depth * 0.8, yard.width * 0.55)
+    const target = new Vector3(0, view === 'render' ? 1.65 : 1.35, -0.25)
+    const { beds, structures, heatmaps } = contents.current
+    const { left, right, back, front, top } = gardenBounds(yard, beds, structures, heatmaps)
+    const w = right - left, d = front - back
+    // A saved site can extend well beyond the original planting patch.
+    const large = w > yard.width + 8 || d > yard.depth + 14 || top > Math.max(14, yard.width * 0.6)
+    if (large) target.set((right + left) / 2, view === 'plan' ? 0 : top / 2, (back + front) / 2)
+    if (view === 'plan') {
+      camera.position.set(target.x, Math.max(100, top + 20), (large ? target.z : 0) + 0.001)
+      if (camera instanceof ThreeOrthoCamera) {
+        camera.zoom = Math.min(size.width / ((large ? w : yard.width) + 6), size.height / ((large ? d : yard.depth) + 6))
+        camera.updateProjectionMatrix()
+      }
     }
-    controlsRef.current?.reset()
-  }, [resetViewNonce])
+    else if (large) {
+      // Look from the planting side of the tallest building.
+      const tallest = structures.filter(s => s.type === 'building').sort((a, b) => b.size[1] - a.size[1])[0]
+      const side = tallest && tallest.position[0] > target.x ? -1 : 1
+      const direction = new Vector3(side, view === 'render' ? 0.58 : 1.3, 0.65).normalize()
+      const horizontal = new Vector3().crossVectors(camera.up, direction).normalize()
+      const vertical = new Vector3().crossVectors(direction, horizontal)
+      const tanV = Math.tan(45 * DEG2RAD / 2)
+      let distance = 0
+      for (const x of [left, right]) for (const z of [back, front]) for (const y of [0, top]) {
+        const corner = new Vector3(x, y, z).sub(target)
+        const clearance = Math.max(Math.abs(corner.dot(horizontal)) / aspect, Math.abs(corner.dot(vertical))) / tanV
+        distance = Math.max(distance, corner.dot(direction) + clearance * 1.1)
+      }
+      camera.position.copy(target).addScaledVector(direction, distance)
+    }
+    else if (view === 'render') camera.position.set(-fit * 0.18, 3.8 + fit * 0.16, yard.depth / 2 + fit * 1.12)
+    else camera.position.set(fit * 0.42, fit * 0.93, fit * 1.21)
+    camera.lookAt(target)
+    if (orbit) { orbit.target.copy(target); orbit.update() }
+    invalidate()
+  }, [camera, size.width, size.height, view, yard.width, yard.depth, resetViewNonce, invalidate])
 
   // F2: Sun with dynamic heading
   const sun = useMemo(
@@ -148,7 +196,7 @@ function SceneContent({
   const sunPathPoints = useMemo(() => {
     const doy = dayOfYear
     const pts: [number, number, number][] = []
-    for (let h = 4; h <= 22; h += 0.25) {
+    for (let h = 0; h <= 24; h += 0.25) {
       const s = getSunPosition(doy, h, yardHeadingDeg, sunLocation)
       if (s.altitudeDeg > 0) {
         const norm = Math.sqrt(s.sceneX * s.sceneX + s.sceneY * s.sceneY + s.sceneZ * s.sceneZ) || 1
@@ -159,26 +207,27 @@ function SceneContent({
     return pts
   }, [season, yardHeadingDeg, sunVizRadius, sunLocation, dayOfYear])
 
-  const skyColor = sun.isAboveHorizon ? '#b3d9f2' : '#111827'
+
 
   const selectedStructure = structures.find((s) => s.id === selectedId)
   const selectedBed = beds.find((b) => b.id === selectedBedId)
 
   return (
     <>
-      <color attach="background" args={[skyColor]} />
+      <GardenSky brightness={sun.isAboveHorizon ? 0.55 + sun.intensity * 0.32 : 0.035} />
+      {view === 'plan' && <OrthographicCamera makeDefault position={[0, 100, 0.001]} near={0.1} far={500} zoom={Math.min(size.width / (yard.width + 6), size.height / (yard.depth + 6))} />}
 
       {/* Lighting */}
-      <ambientLight intensity={sun.isAboveHorizon ? 0.35 : 0.08} />
+      <ambientLight intensity={sun.isAboveHorizon ? 0.48 : 0.12} />
       <hemisphereLight
-        args={['#87CEEB', '#3a5a1c', sun.isAboveHorizon ? 0.25 : 0.03]}
+        args={['#e7efff', '#a8a17b', sun.isAboveHorizon ? 1.08 : 0.15]}
       />
 
       {sun.isAboveHorizon && (
         <directionalLight
           position={[sun.sceneX, sun.sceneY, sun.sceneZ]}
-          intensity={sun.intensity}
-          color="#fff8e7"
+          intensity={sun.intensity * 1.65}
+          color={sun.altitudeDeg < 15 ? "#ffd19c" : "#fff1d8"}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -188,73 +237,42 @@ function SceneContent({
           shadow-camera-right={40}
           shadow-camera-top={40}
           shadow-camera-bottom={-40}
-          shadow-bias={-0.0005}
+          shadow-bias={-0.00024}
+          shadow-normalBias={0.018}
         />
       )}
 
       {/* Controls */}
       <OrbitControls
         ref={controlsRef}
-        target={[0, 0, 0]}
+        makeDefault
+        enableRotate={view === 'orbit'}
+        enablePan={view !== 'render'}
+        enableZoom={view !== 'render'}
         maxPolarAngle={Math.PI / 2.05}
         minDistance={8}
-        maxDistance={250}
+        maxDistance={Math.max(250, yard.width * 4, yard.depth * 4)}
         enableDamping
+        touches={{ ONE: TOUCH.PAN, TWO: view === 'orbit' ? TOUCH.DOLLY_ROTATE : TOUCH.DOLLY_PAN }}
       />
 
       {/* ---- Environment ---- */}
 
-      {/* Ground (extends beyond yard) */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.02, 0]}
-        receiveShadow
-        onClick={sunProbeActive ? (e) => {
-          e.stopPropagation()
-          const p = e.point
-          onSunProbePlace(
-            Math.round(p.x * 2) / 2,
-            Math.round(p.z * 2) / 2,
-          )
-        } : undefined}
-      >
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#4a7c4a" />
-      </mesh>
+      <GardenGround yard={yard} planted={!original} onProbe={sunProbeActive ? onSunProbePlace : undefined} />
+      {landscape && <GardenBorder yard={yard} />}
 
-      {/* Yard area (24x10) */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.01, 0]}
-        receiveShadow
-        onClick={sunProbeActive ? (e) => {
-          e.stopPropagation()
-          const p = e.point
-          onSunProbePlace(
-            Math.round(p.x * 2) / 2,
-            Math.round(p.z * 2) / 2,
-          )
-        } : undefined}
-      >
-        <planeGeometry args={[24, 10]} />
-        <meshStandardMaterial color="#5a8a50" />
-      </mesh>
-
-      {/* Shared space beyond yard (SSE side, z=5 to z=15) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.015, 10]} receiveShadow>
-        <planeGeometry args={[24, 10]} />
-        <meshStandardMaterial color="#4e8248" />
-      </mesh>
-
-      {/* Property boundary line (z=+5, dashed) */}
-      <Line
-        points={[[-12, 0.05, 5], [12, 0.05, 5]]}
-        color="#FFD700"
-        lineWidth={2}
-        dashed
-        dashSize={1}
-        gapSize={0.5}
-      />
+      {yardGuides && (
+        <group>
+          <mesh rotation-x={-Math.PI / 2} position={[0, -0.024, yard.depth]} receiveShadow>
+            <planeGeometry args={[yard.width, yard.depth]} />
+            <meshStandardMaterial color="#7e9866" transparent opacity={0.5} />
+          </mesh>
+          <Line points={[[-yard.width / 2, 0.055, yard.depth / 2], [yard.width / 2, 0.055, yard.depth / 2]]}
+            color="#f7cc67" lineWidth={2} dashed dashSize={1} gapSize={0.5} />
+        </group>
+      )}
+      {!original && layout?.paths.map((path, i) => <WalkingPath key={i} path={path} opacity={gardenItemsOpacity} />)}
+      {!original && layout?.panels.map((panel, i) => <SolarPanel key={i} panel={panel} opacity={gardenItemsOpacity} />)}
 
       {/* ---- Measurement grid overlay ---- */}
       {showGrid && (
@@ -303,7 +321,7 @@ function SceneContent({
 
       {/* ---- F3: Data-driven structures ---- */}
       {structures.map((s) =>
-        s.id === selectedId ? null : (
+        s.id === selectedId && !sunProbeActive ? null : (
           <StructureMesh
             key={s.id}
             structure={s}
@@ -313,27 +331,27 @@ function SceneContent({
         ),
       )}
 
-      {selectedStructure && (
+      {selectedStructure && !sunProbeActive && (
         <SelectedStructureGizmo
           key={selectedStructure.id}
           structure={selectedStructure}
-          orbitControlsRef={controlsRef}
           onMove={onStructureMove}
         />
       )}
 
       {/* ---- Garden elements ---- */}
-      {beds.map((bed) =>
-        bed.id === selectedBedId ? null : (
+      {!original && beds.map((bed) =>
+        bed.id === selectedBedId && !sunProbeActive ? null : (
           <group key={bed.id} position={[bed.x, 0, bed.z]} rotation={[0, (bed.rotation ?? 0) * DEG2RAD, 0]}>
-            <GardenBed bed={bed} isSelected={false} onSelect={() => onSelectBed(bed.id)} opacity={gardenItemsOpacity} probing={sunProbeActive} />
+            <GardenBed bed={bed} isSelected={false} onSelect={() => onSelectBed(bed.id)} opacity={gardenItemsOpacity} probing={sunProbeActive} label={labels ? bed.name : undefined} />
           </group>
         ),
       )}
-      {selectedBed && (
+      {!original && selectedBed && !sunProbeActive && (
         <SelectedBedGizmo
           key={selectedBed.id}
           bed={selectedBed}
+          labels={labels}
           orbitControlsRef={controlsRef}
           onMove={onBedMove}
           onUpdate={onBedUpdate}
@@ -342,8 +360,8 @@ function SceneContent({
       )}
 
       {/* ---- Measurement labels ---- */}
-      {showMeasurements && (
-        <MeasurementLabels beds={beds} unit={measurementUnit} />
+      {!original && showMeasurements && (
+        <MeasurementLabels beds={beds} paths={layout?.paths ?? []} panels={layout?.panels ?? []} unit={measurementUnit} />
       )}
 
       {/* ---- Sun probe marker ---- */}
@@ -352,13 +370,13 @@ function SceneContent({
       )}
 
       {/* ---- Sun visualization ---- */}
-      {sun.isAboveHorizon && <SunSphere sun={sun} sunVizRadius={sunVizRadius} />}
-      {sunPathPoints.length > 2 && (
+      {showSunPath && sun.isAboveHorizon && <SunSphere sun={sun} sunVizRadius={sunVizRadius} />}
+      {showSunPath && sunPathPoints.length > 2 && (
         <Line points={sunPathPoints} color="#FFA000" lineWidth={1.5} />
       )}
 
       {/* ---- F2: Dynamic direction labels ---- */}
-      <DirectionLabels yardHeadingDeg={yardHeadingDeg} />
+      {(yardGuides || showGrid) && <DirectionLabels yardHeadingDeg={yardHeadingDeg} yard={yard} />}
     </>
   )
 }
@@ -377,19 +395,13 @@ function StructureMesh({
   probing: boolean
 }) {
   return (
-    <mesh
-      position={structure.position}
-      castShadow={structure.castShadow}
-      receiveShadow={structure.receiveShadow}
-      onClick={(e) => {
-        if (probing) return
-        e.stopPropagation()
-        onSelect()
-      }}
-    >
-      <boxGeometry args={structure.size} />
-      <meshStandardMaterial color={structure.color} />
-    </mesh>
+    <group position={structure.position} onClick={e => {
+      if (probing || e.delta > 4) return
+      e.stopPropagation()
+      onSelect()
+    }}>
+      <StructureBody structure={structure} />
+    </group>
   )
 }
 
@@ -399,40 +411,21 @@ function StructureMesh({
 
 function SelectedStructureGizmo({
   structure,
-  orbitControlsRef,
   onMove,
 }: {
   structure: Structure
-  orbitControlsRef: React.RefObject<OrbitControlsImpl | null>
   onMove: (id: string, position: [number, number, number]) => void
 }) {
-  const tcRef = useRef<{ addEventListener: Function; removeEventListener: Function; detach?: Function; dispose?: Function; object?: { position: Vector3 } } | null>(null)
-  const isDragging = useRef(false)
-
+  const controls = useRef<TransformControlsImpl>(null)
+  const object = useRef<Group>(null!)
+  const canvas = useThree(state => state.gl.domElement)
+  const camera = useThree(state => state.camera)
   useEffect(() => {
-    const tc = tcRef.current
-    if (!tc) return
-    const handler = (event: { value: boolean }) => {
-      isDragging.current = event.value
-      if (orbitControlsRef.current) {
-        orbitControlsRef.current.enabled = !event.value
-      }
-      if (!event.value && tc.object) {
-        const p = tc.object.position
-        onMove(structure.id, [
-          Math.round(p.x * 2) / 2,
-          Math.round(p.y * 2) / 2,
-          Math.round(p.z * 2) / 2,
-        ])
-      }
-    }
-    tc.addEventListener('dragging-changed', handler)
-    return () => {
-      tc.removeEventListener('dragging-changed', handler)
-      tc.detach?.()
-      tc.dispose?.()
-    }
-  }, [structure.id, onMove, orbitControlsRef])
+    const active = controls.current
+    if (!active) return
+    active.connect(canvas)
+    return () => active.dispose()
+  }, [camera, canvas])
 
   const edgesGeo = useMemo(
     () => new BoxGeometry(...structure.size),
@@ -440,28 +433,21 @@ function SelectedStructureGizmo({
   )
 
   return (
-    <TransformControls
-      ref={tcRef as React.Ref<never>}
-      mode="translate"
-      translationSnap={0.5}
-      position={structure.position}
-    >
-      <group>
-        <mesh
-          castShadow={structure.castShadow}
-          receiveShadow={structure.receiveShadow}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <boxGeometry args={structure.size} />
-          <meshStandardMaterial color={structure.color} />
-        </mesh>
-        {/* Selection highlight */}
+    <>
+      <group ref={object} position={structure.position}>
+        <group onClick={e => e.stopPropagation()}><StructureBody structure={structure} /></group>
         <lineSegments>
           <edgesGeometry args={[edgesGeo]} />
           <lineBasicMaterial color="#00ff88" />
         </lineSegments>
       </group>
-    </TransformControls>
+      <TransformControls ref={controls} object={object} domElement={canvas} mode="translate" translationSnap={0.5}
+        onMouseUp={() => {
+          const point = object.current?.position
+          if (point) onMove(structure.id, [point.x, point.y, point.z])
+        }}
+      />
+    </>
   )
 }
 
@@ -488,13 +474,14 @@ interface DragState {
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 
 function SelectedBedGizmo({
-  bed,
+  bed, labels,
   orbitControlsRef,
   onMove,
   onUpdate,
   opacity,
 }: {
   bed: BedConfig
+  labels: boolean
   orbitControlsRef: React.RefObject<OrbitControlsImpl | null>
   onMove: (id: string, x: number, z: number) => void
   onUpdate: (id: string, patch: Partial<BedConfig>) => void
@@ -516,7 +503,7 @@ function SelectedBedGizmo({
 
   const displayBed = localPatch ? { ...bed, ...localPatch } : bed
   const rot = (displayBed.rotation ?? 0) * DEG2RAD
-  const frameH = 0.5
+  const frameH = 0.88
 
   function groundPoint(e: PointerEvent): Vector3 | null {
     const rect = gl.domElement.getBoundingClientRect()
@@ -534,8 +521,8 @@ function SelectedBedGizmo({
     // Stop the native DOM event to prevent OrbitControls from starting its own drag
     e.nativeEvent.stopImmediatePropagation()
     if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
-    // Use the R3F intersection point projected to ground (Y=0) for reliability
-    const point = new Vector3(e.point.x, 0, e.point.z)
+    // Use the same ground plane on press and move so tall plants do not offset the drag.
+    const point = groundPoint(e.nativeEvent) ?? new Vector3(e.point.x, 0, e.point.z)
     const bedNow = bedRef.current
     dragRef.current = {
       mode,
@@ -651,9 +638,13 @@ function SelectedBedGizmo({
 
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     return () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+      if (dragRef.current && orbitControlsRef.current) orbitControlsRef.current.enabled = true
+      dragRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, gl, orbitControlsRef])
@@ -671,7 +662,7 @@ function SelectedBedGizmo({
         onPointerDown={(e) => startDrag(e, 'translate')}
         {...handleCursor('move')}
       >
-        <GardenBed bed={displayBed} isSelected onSelect={() => {}} opacity={opacity} probing={false} />
+        <GardenBed bed={displayBed} label={labels ? displayBed.name : undefined} isSelected onSelect={() => {}} opacity={opacity} probing={false} />
       </group>
 
       {/* Resize handles on edges */}
@@ -719,9 +710,13 @@ function SelectedBedGizmo({
 
 function MeasurementLabels({
   beds,
+  paths,
+  panels,
   unit,
 }: {
   beds: BedConfig[]
+  paths: PathConfig[]
+  panels: PanelConfig[]
   unit: MeasurementUnit
 }) {
   const fmt = (ft: number) => {
@@ -761,6 +756,30 @@ function MeasurementLabels({
           </Html>
         )
       })}
+      {paths.map((path, i) => (
+        <Html
+          key={`mp-${i}`}
+          position={[path.x, 0.02, path.z + path.depth / 2 + 0.4]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <div style={labelStyle}>
+            {fmt(path.width)} x {fmt(path.depth)}
+          </div>
+        </Html>
+      ))}
+      {panels.map((panel, i) => (
+        <Html
+          key={`msp-${i}`}
+          position={[panel.x, 0.1, panel.z + panel.widthFt / 2 + 0.4]}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
+          <div style={labelStyle}>
+            {fmt(panel.widthFt)} x {fmt(panel.heightFt)}
+          </div>
+        </Html>
+      ))}
     </>
   )
 }
@@ -769,214 +788,64 @@ function MeasurementLabels({
 /*  Garden Bed                                                        */
 /* ------------------------------------------------------------------ */
 
-function GardenBed({
-  bed,
-  isSelected,
-  onSelect,
-  opacity,
-  probing,
-}: {
-  bed: BedConfig
-  isSelected: boolean
-  onSelect: () => void
-  opacity: number
-  probing: boolean
+function GardenBed({ bed, isSelected, onSelect, opacity, probing, label }: {
+  bed: BedConfig; isSelected: boolean; onSelect: () => void; opacity: number; probing: boolean; label?: string
 }) {
-  const frameH = 0.5
-  const frameW = bed.width + 0.12
-  const frameD = bed.depth + 0.12
+  return <group onClick={e => {
+    if (probing || e.delta > 4) return
+    e.stopPropagation()
+    onSelect()
+  }}>
+    <PlantedBed bed={bed} opacity={opacity} selected={isSelected} label={label} />
+  </group>
+}
+
+/* ------------------------------------------------------------------ */
+function WalkingPath({ path, opacity }: { path: PathConfig; opacity: number }) {
   const faded = opacity < 1
-  // key forces Three.js to recreate the material when transparent toggles
-  const matKey = faded ? 't' : 'o'
-
-  const edgesGeo = useMemo(
-    () => new BoxGeometry(frameW, frameH, frameD),
-    [frameW, frameD],
-  )
-
   return (
-    <group>
-      {/* Wooden frame (clickable) */}
-      <mesh
-        position={[0, frameH / 2, 0]}
-        castShadow={!faded}
-        receiveShadow
-        onClick={(e) => {
-          if (probing) return
-          e.stopPropagation()
-          onSelect()
-        }}
-      >
-        <boxGeometry args={[frameW, frameH, frameD]} />
-        <meshStandardMaterial key={matKey + 'f'} color="#6d4c2a" transparent={faded} opacity={opacity} depthWrite={!faded} />
-      </mesh>
-
-      {/* Selection highlight */}
-      {isSelected && (
-        <lineSegments position={[0, frameH / 2, 0]}>
-          <edgesGeometry args={[edgesGeo]} />
-          <lineBasicMaterial color="#00ff88" />
-        </lineSegments>
-      )}
-
-      {/* Soil */}
-      <mesh position={[0, frameH - 0.04, 0]} receiveShadow>
-        <boxGeometry args={[bed.width - 0.04, 0.08, bed.depth - 0.04]} />
-        <meshStandardMaterial key={matKey + 's'} color="#3e2723" transparent={faded} opacity={opacity} depthWrite={!faded} />
-      </mesh>
-
-      {/* Plant surface color */}
-      <mesh position={[0, frameH + 0.01, 0]} receiveShadow castShadow={!faded}>
-        <boxGeometry args={[bed.width - 0.1, 0.04, bed.depth - 0.1]} />
-        <meshStandardMaterial key={matKey + 'p'} color={bed.color} transparent={faded} opacity={opacity} depthWrite={!faded} />
-      </mesh>
-
-      {/* Plant indicators (small spheres) */}
-      <PlantDots bed={bed} baseY={frameH + 0.06} opacity={opacity} />
-
-      {/* Trellis */}
-      {bed.hasTrellis && (
-        <Trellis
-          width={bed.width}
-          depth={bed.depth}
-          height={bed.trellisHeight ?? 6}
-          color={bed.color}
-          opacity={opacity}
-        />
-      )}
-
-      {/* Floating label */}
-      <Html
-        position={[0, bed.hasTrellis ? (bed.trellisHeight ?? 6) + 1 : 2, 0]}
-        center
-        style={{ pointerEvents: 'none' }}
-      >
-        <div
-          style={{
-            background: 'rgba(0,0,0,0.78)',
-            color: '#fff',
-            padding: '3px 10px',
-            borderRadius: '4px',
-            fontSize: '11px',
-            whiteSpace: 'nowrap',
-            fontFamily: 'system-ui, sans-serif',
-            fontWeight: 500,
-            border: `2px solid ${isSelected ? '#00ff88' : bed.color}`,
-          }}
-        >
-          {bed.sunNeeds === 'full' ? '\u2600\uFE0F ' : bed.sunNeeds === 'partial' ? '\uD83C\uDF24\uFE0F ' : '\u26C5 '}{bed.name}
-          {isSelected && bed.plantType && (
-            <div style={{ fontSize: '9px', opacity: 0.7, marginTop: '1px' }}>
-              pH {PLANT_PRESETS[bed.plantType].phRange[0]}&ndash;{PLANT_PRESETS[bed.plantType].phRange[1]} &middot; {PLANT_PRESETS[bed.plantType].minSunHours}+ PSH
-            </div>
-          )}
-        </div>
-      </Html>
-    </group>
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[path.x, 0.005, path.z]}
+      receiveShadow
+    >
+      <planeGeometry args={[path.width, path.depth]} />
+      <meshStandardMaterial key={faded ? 't' : 'o'} color="#c4a882" transparent={faded} opacity={opacity} depthWrite={!faded} />
+    </mesh>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/*  Plant dot indicators on beds                                      */
+/*  Solar panel                                                       */
 /* ------------------------------------------------------------------ */
 
-function PlantDots({ bed, baseY, opacity }: { bed: BedConfig; baseY: number; opacity: number }) {
-  const positions = useMemo(() => {
-    const pts: [number, number, number][] = []
-    const sp = bed.plantType
-      ? Math.max(0.5, PLANT_PRESETS[bed.plantType].spacingInches / 12)
-      : Math.max(0.8, Math.min(1.5, bed.width / 5))
-    const cols = Math.max(1, Math.floor((bed.width - 0.4) / sp))
-    const rows = Math.max(1, Math.floor((bed.depth - 0.3) / sp))
-    const gx = bed.width / (cols + 1)
-    const gz = bed.depth / (rows + 1)
-    for (let c = 1; c <= cols; c++) {
-      for (let r = 1; r <= rows; r++) {
-        pts.push([
-          -bed.width / 2 + c * gx,
-          baseY,
-          -bed.depth / 2 + r * gz,
-        ])
-      }
-    }
-    return pts
-  }, [bed.width, bed.depth, bed.plantType, baseY])
-
-  const radius = bed.sunNeeds === 'full' ? 0.22 : 0.17
-  const col = lighten(bed.color, 25)
+function SolarPanel({ panel, opacity }: { panel: PanelConfig; opacity: number }) {
+  const tiltRad = panel.tiltDeg * DEG2RAD
   const faded = opacity < 1
   const matKey = faded ? 't' : 'o'
 
   return (
-    <>
-      {positions.map((p, i) => (
-        <mesh key={i} position={p} castShadow={!faded}>
-          <sphereGeometry args={[radius, 6, 6]} />
-          <meshStandardMaterial key={matKey} color={col} transparent={faded} opacity={opacity} depthWrite={!faded} />
+    <group position={[panel.x, 0, panel.z]} rotation-y={panel.facingAngle - Math.PI}>
+      <group rotation={[0, 0, -tiltRad]}>
+        <mesh position={[0, panel.heightFt / 2, 0]}>
+          <boxGeometry
+            args={[0.1, panel.heightFt + 0.08, panel.widthFt + 0.08]}
+          />
+          <meshStandardMaterial key={matKey + 'f'} color="#37474f" transparent={faded} opacity={opacity} depthWrite={!faded} />
         </mesh>
-      ))}
-    </>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Trellis (for vine / climbing crops)                               */
-/* ------------------------------------------------------------------ */
-
-function Trellis({
-  width,
-  depth,
-  height,
-  color,
-  opacity,
-}: {
-  width: number
-  depth: number
-  height: number
-  color: string
-  opacity: number
-}) {
-  const faded = opacity < 1
-  const matKey = faded ? 't' : 'o'
-  const posts = useMemo(() => {
-    const n = Math.max(2, Math.ceil(width / 3))
-    return Array.from({ length: n }, (_, i) =>
-      -width / 2 + 0.15 + (i / (n - 1)) * (width - 0.3),
-    )
-  }, [width])
-
-  return (
-    <group position={[0, 0, -depth / 2 - 0.1]}>
-      {/* Vertical posts */}
-      {posts.map((x, i) => (
-        <mesh key={i} position={[x, height / 2, 0]} castShadow={!faded}>
-          <boxGeometry args={[0.08, height, 0.08]} />
-          <meshStandardMaterial key={matKey} color="#5D4037" transparent={faded} opacity={opacity} depthWrite={!faded} />
+        <mesh position={[0, panel.heightFt / 2, 0]} castShadow={!faded} receiveShadow>
+          <boxGeometry args={[0.11, panel.heightFt, panel.widthFt]} />
+          <meshStandardMaterial
+            key={matKey + 'p'}
+            color="#1a237e"
+            metalness={0.8}
+            roughness={0.2}
+            transparent={faded}
+            opacity={opacity}
+            depthWrite={!faded}
+          />
         </mesh>
-      ))}
-
-      {/* Horizontal rails */}
-      {[1, 2, 3, 4].map((n) => {
-        const y = (n / 4) * (height - 0.5) + 0.5
-        return y <= height ? (
-          <mesh key={n} position={[0, y, 0]} castShadow={!faded}>
-            <boxGeometry args={[width - 0.1, 0.05, 0.05]} />
-            <meshStandardMaterial key={matKey} color="#795548" transparent={faded} opacity={opacity} depthWrite={!faded} />
-          </mesh>
-        ) : null
-      })}
-
-      {/* Vine foliage (semi-transparent plane) */}
-      <mesh position={[0, height / 2, 0.06]}>
-        <planeGeometry args={[width - 0.2, height - 0.6]} />
-        <meshStandardMaterial
-          color={color}
-          transparent
-          opacity={Math.min(0.3, opacity)}
-          side={DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
+      </group>
     </group>
   )
 }
@@ -1026,7 +895,7 @@ function SunSphere({ sun, sunVizRadius }: { sun: SunPosition; sunVizRadius: numb
 /*  F2: Dynamic direction labels at yard edges                        */
 /* ------------------------------------------------------------------ */
 
-function DirectionLabels({ yardHeadingDeg }: { yardHeadingDeg: number }) {
+function DirectionLabels({ yardHeadingDeg, yard }: { yardHeadingDeg: number; yard: YardSize }) {
   const labels = useMemo(() => {
     const plusX = degreesToCompass(yardHeadingDeg)
     const minusX = degreesToCompass((yardHeadingDeg + 180) % 360)
@@ -1034,12 +903,12 @@ function DirectionLabels({ yardHeadingDeg }: { yardHeadingDeg: number }) {
     const plusZ = degreesToCompass((yardHeadingDeg + 90) % 360)
     const color = '#c5e1a5'
     return [
-      { text: plusX, pos: [15, 2, 0] as [number, number, number], color },
-      { text: minusX, pos: [-14, 2, 0] as [number, number, number], color },
-      { text: minusZ, pos: [0, 2, -7.5] as [number, number, number], color },
-      { text: plusZ, pos: [0, 2, 8] as [number, number, number], color },
+      { text: plusX, pos: [yard.width / 2 + 2, 2, 0] as [number, number, number], color },
+      { text: minusX, pos: [-yard.width / 2 - 2, 2, 0] as [number, number, number], color },
+      { text: minusZ, pos: [0, 2, -yard.depth / 2 - 2] as [number, number, number], color },
+      { text: plusZ, pos: [0, 2, yard.depth / 2 + 2] as [number, number, number], color },
     ]
-  }, [yardHeadingDeg])
+  }, [yardHeadingDeg, yard])
 
   return (
     <>
@@ -1156,6 +1025,15 @@ function SunHeatmapOverlay({
     return tex;
   }, [grid, mode]);
 
+  // Dispose of the previous GPU texture whenever a new one is created.
+  // Without this, every grid/mode change leaks a DataTexture's worth of GPU
+  // memory — noticeable after scrubbing the day slider for a while.
+  useEffect(() => {
+    return () => {
+      texture.dispose();
+    };
+  }, [texture]);
+
   // Plane covers the grid area, positioned just above ground
   const width = grid.maxX - grid.minX;
   const depth = grid.maxZ - grid.minZ;
@@ -1245,7 +1123,7 @@ function HeatmapGizmo({
     e.stopPropagation()
     e.nativeEvent.stopImmediatePropagation()
     if (orbitControlsRef.current) orbitControlsRef.current.enabled = false
-    const point = new Vector3(e.point.x, 0, e.point.z)
+    const point = groundPoint(e.nativeEvent) ?? new Vector3(e.point.x, 0, e.point.z)
     const h = heatmapRef.current
     dragRef.current = {
       mode,
@@ -1325,9 +1203,13 @@ function HeatmapGizmo({
 
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+    window.addEventListener('pointercancel', handleUp)
     return () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      window.removeEventListener('pointercancel', handleUp)
+      if (dragRef.current && orbitControlsRef.current) orbitControlsRef.current.enabled = true
+      dragRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, gl, orbitControlsRef])
@@ -1508,16 +1390,4 @@ function SunProbeMarker({ x, z }: { x: number; z: number }) {
       </Html>
     </group>
   )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
-
-function lighten(hex: string, pct: number): string {
-  const n = parseInt(hex.replace('#', ''), 16)
-  const r = Math.min(255, ((n >> 16) & 0xff) + Math.round(2.55 * pct))
-  const g = Math.min(255, ((n >> 8) & 0xff) + Math.round(2.55 * pct))
-  const b = Math.min(255, (n & 0xff) + Math.round(2.55 * pct))
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
